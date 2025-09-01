@@ -1,0 +1,641 @@
+{
+  "info": {
+    "name": "منصة تحليل الأسهم السعودية - API Collection",
+    "description": "مجموعة شاملة لاختبار جميع نقاط النهاية في منصة تحليل الأسهم السعودية",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5002",
+      "type": "string"
+    },
+    {
+      "key": "api_version",
+      "value": "/api/v1",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "🏥 فحص الصحة والنظام",
+      "item": [
+        {
+          "name": "فحص الصحة الأساسي",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "health"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "فحص الصحة المفصل",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/detailed",
+              "host": ["{{base_url}}"],
+              "path": ["health", "detailed"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "الصفحة الرئيسية",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📊 بيانات السوق",
+      "item": [
+        {
+          "name": "مؤشر تاسي العام",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/tasi-index",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "tasi-index"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "جميع الأسعار اللحظية",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/prices",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "prices"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "أسعار أسهم محددة",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/prices?symbols=SABIC,STC,RAJHI",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "prices"],
+              "query": [
+                {
+                  "key": "symbols",
+                  "value": "SABIC,STC,RAJHI"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "سعر سهم واحد",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/prices/SABIC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "prices", "SABIC"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "البيانات التاريخية",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/historical/SABIC?period=1m&interval=1d",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "historical", "SABIC"],
+              "query": [
+                {
+                  "key": "period",
+                  "value": "1m"
+                },
+                {
+                  "key": "interval",
+                  "value": "1d"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ملخص السوق",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/market-summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "market-summary"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔍 التحليل الفني والتوصيات",
+      "item": [
+        {
+          "name": "التحليل الفني لسهم",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/analysis/SABIC?timeframe=1d",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analysis", "SABIC"],
+              "query": [
+                {
+                  "key": "timeframe",
+                  "value": "1d"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "جميع التوصيات",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/signals",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "signals"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "توصيات الشراء فقط",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/signals?signal_type=شراء&min_confidence=70",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "signals"],
+              "query": [
+                {
+                  "key": "signal_type",
+                  "value": "شراء"
+                },
+                {
+                  "key": "min_confidence",
+                  "value": "70"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🔔 نظام الإشعارات",
+      "item": [
+        {
+          "name": "الاشتراك في تليجرام",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chat_id\": \"123456789\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/subscribe/telegram",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "subscribe", "telegram"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إلغاء الاشتراك من تليجرام",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/subscribe/telegram/123456789",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "subscribe", "telegram", "123456789"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "الاشتراك في البريد الإلكتروني",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/subscribe/email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "subscribe", "email"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إلغاء الاشتراك من البريد",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/subscribe/email/user@example.com",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "subscribe", "email", "user@example.com"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إرسال ملخص السوق",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/send/market-summary",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "send", "market-summary"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إرسال توصية تداول",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/send/trading-signal/SABIC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "send", "trading-signal", "SABIC"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إرسال تنبيه سعر",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_id\": \"user123\",\n  \"symbol\": \"SABIC\",\n  \"target_price\": 95.00,\n  \"alert_type\": \"above\",\n  \"notification_type\": \"telegram\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/send/price-alert",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "send", "price-alert"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إحصائيات الإشعارات",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "stats"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "تحديث إعدادات الإشعارات",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"market_summary_enabled\": true,\n  \"trading_signals_enabled\": true,\n  \"price_alerts_enabled\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/settings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "settings"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "اختبار إشعار تليجرام",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/test/telegram/123456789",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "test", "telegram", "123456789"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "اختبار إشعار البريد الإلكتروني",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/test/email",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "test", "email"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "📈 إدارة الرموز والقطاعات",
+      "item": [
+        {
+          "name": "قائمة جميع الرموز",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/symbols",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "symbols"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "البحث في الرموز",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/symbols?search=سابك&sector=petrochemicals",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "symbols"],
+              "query": [
+                {
+                  "key": "search",
+                  "value": "سابك"
+                },
+                {
+                  "key": "sector",
+                  "value": "petrochemicals"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "إضافة رمز جديد",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ticker\": \"NEWSTOCK\",\n  \"name_ar\": \"الشركة الجديدة\",\n  \"name_en\": \"New Company\",\n  \"sector\": \"technology\",\n  \"market_cap\": 1000000000,\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/symbols",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "symbols"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "الحصول على رمز محدد",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/symbols/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "symbols", "1"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "البحث بالرمز",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/symbols/ticker/SABIC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "symbols", "ticker", "SABIC"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "قائمة القطاعات",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/sectors",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "sectors"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "🧪 اختبارات شاملة",
+      "item": [
+        {
+          "name": "اختبار سيناريو كامل - تحليل سهم",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "// اختبار الاستجابة الأساسية",
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// اختبار بنية البيانات",
+                  "pm.test('Response has required fields', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('success');",
+                  "    pm.expect(jsonData).to.have.property('data');",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "// اختبار بيانات التحليل",
+                  "pm.test('Analysis data is complete', function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.have.property('symbol');",
+                  "    pm.expect(jsonData.data).to.have.property('indicators');",
+                  "    pm.expect(jsonData.data).to.have.property('current_price');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/analysis/SABIC",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "analysis", "SABIC"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "اختبار تدفق الإشعارات",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Subscription successful', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "    pm.expect(jsonData).to.have.property('message');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"chat_id\": \"test_chat_123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_version}}/notifications/subscribe/telegram",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "notifications", "subscribe", "telegram"]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// إعداد متغيرات عامة",
+          "pm.globals.set('timestamp', new Date().toISOString());",
+          "",
+          "// تسجيل بداية الطلب",
+          "console.log('🚀 بدء طلب:', pm.request.name);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// اختبارات عامة لجميع الطلبات",
+          "pm.test('Response time is less than 5000ms', function () {",
+          "    pm.expect(pm.response.responseTime).to.be.below(5000);",
+          "});",
+          "",
+          "pm.test('Response has JSON content-type', function () {",
+          "    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+          "});",
+          "",
+          "// تسجيل نتيجة الطلب",
+          "console.log('✅ انتهى الطلب:', pm.request.name, 'في', pm.response.responseTime, 'ms');"
+        ]
+      }
+    }
+  ]
+}
+
