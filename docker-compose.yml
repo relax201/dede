@@ -1,33 +1,40 @@
-version: '3.8'
-
 services:
-  # قاعدة البيانات PostgreSQL
   db:
-    image: postgres:14
+    image: postgres:16-alpine
     container_name: tasi_postgres
     environment:
       POSTGRES_DB: tasi_platform
       POSTGRES_USER: tasi_user
-      POSTGRES_PASSWORD: secure_password_123
-      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_dev_only}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+      - ./database/postgres/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U tasi_user -d tasi_platform"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - tasi_network
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks: [tasi_net]
 
-  # Redis للتخزين المؤقت
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: tasi_clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./database/clickhouse/001_schema.sql:/docker-entrypoint-initdb.d/001_schema.sql:ro
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    networks: [tasi_net]
+
   redis:
-    image: redis:6-alpine
+    image: redis:7-alpine
     container_name: tasi_redis
     ports:
       - "6379:6379"
@@ -35,163 +42,88 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
-    restart: unless-stopped
-    networks:
-      - tasi_network
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [tasi_net]
 
-  # الواجهة الخلفية FastAPI
-  backend:
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: tasi_backend
-    ports:
-      - "5002:5002"
+  kafka:
+    image: bitnami/kafka:3.8
+    container_name: tasi_kafka
     environment:
-      # إعدادات التطبيق
-      - APP_NAME=منصة تحليل الأسهم السعودية
-      - APP_VERSION=1.0.0
-      - DEBUG=false
-      
-      # قاعدة البيانات
-      - DATABASE_URL=postgresql://tasi_user:secure_password_123@db:5432/tasi_platform
-      
-      # Redis
-      - REDIS_URL=redis://redis:6379/0
-      
-      # الأمان
-      - SECRET_KEY=your-super-secret-key-change-this-in-production-123456789
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
-      - ALGORITHM=HS256
-      
-      # مزود البيانات
-      - API_PROVIDER=tiingo
-      - DATA_API_KEY=${DATA_API_KEY:-your-api-key-here}
-      - DATA_API_BASE_URL=https://api.tiingo.com
-      
-      # تليجرام
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-your-telegram-bot-token}
-      
-      # البريد الإلكتروني
-      - SMTP_SERVER=${SMTP_SERVER:-smtp.gmail.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USERNAME=${SMTP_USERNAME:-your-email@gmail.com}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-your-app-password}
-      - FROM_EMAIL=${FROM_EMAIL:-your-email@gmail.com}
-      - FROM_NAME=منصة تحليل الأسهم السعودية
-      
-      # المنطقة الزمنية
-      - TIMEZONE=Asia/Riyadh
-      
-      # CORS
-      - ALLOWED_ORIGINS=http://localhost:3000,http://frontend:3000,https://your-domain.com
-      
+      - KAFKA_CFG_NODE_ID=0
+      - KAFKA_CFG_PROCESS_ROLES=controller,broker
+      - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093
+      - KAFKA_CFG_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      - KAFKA_CFG_CONTROLLER_QUORUM_VOTERS=0@kafka:9093
+      - KAFKA_CFG_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
+      - ALLOW_PLAINTEXT_LISTENER=yes
+    ports:
+      - "9092:9092"
+    networks: [tasi_net]
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.18.0
+    container_name: tasi_mlflow
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlartifacts
+    ports:
+      - "5000:5000"
     volumes:
-      - ./backend/logs:/app/logs
-      - ./backend/data:/app/data
+      - mlflow_data:/mlartifacts
+    networks: [tasi_net]
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: tasi_backend
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://tasi_user:${POSTGRES_PASSWORD:-changeme_dev_only}@db:5432/tasi_platform
+      REDIS_URL: redis://redis:6379/0
+      CLICKHOUSE_URL: clickhouse://default:@clickhouse:9000/tasi
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ALLOWED_ORIGINS: http://localhost:3000,http://localhost:80,http://frontend
+    ports:
+      - "8000:8000"
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:5002/api/v1/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
-    restart: unless-stopped
-    networks:
-      - tasi_network
+    networks: [tasi_net]
 
-  # الواجهة الأمامية React
   frontend:
     build:
-      context: ./frontend/tasi-frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: frontend/Dockerfile
       args:
-        - REACT_APP_API_URL=http://localhost:5002
-        - REACT_APP_WS_URL=ws://localhost:5002
+        VITE_API_URL: http://localhost:8000
+        VITE_WS_URL: ws://localhost:8000
     container_name: tasi_frontend
     ports:
-      - "3000:3000"
-    environment:
-      - NODE_ENV=production
-      - REACT_APP_API_URL=http://localhost:5002
-      - REACT_APP_WS_URL=ws://localhost:5002
+      - "3000:80"
     depends_on:
-      backend:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - tasi_network
-
-  # Nginx Reverse Proxy (اختياري للإنتاج)
-  nginx:
-    image: nginx:alpine
-    container_name: tasi_nginx
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - nginx_logs:/var/log/nginx
-    depends_on:
-      - frontend
       - backend
-    restart: unless-stopped
-    networks:
-      - tasi_network
-    profiles:
-      - production
+    networks: [tasi_net]
 
-  # مراقبة الصحة والأداء
-  monitoring:
-    image: prom/prometheus:latest
-    container_name: tasi_monitoring
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: tasi_prometheus
+    volumes:
+      - ./infrastructure/monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "9090:9090"
-    volumes:
-      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - prometheus_data:/prometheus
-    command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/etc/prometheus/console_libraries'
-      - '--web.console.templates=/etc/prometheus/consoles'
-      - '--storage.tsdb.retention.time=200h'
-      - '--web.enable-lifecycle'
-    restart: unless-stopped
-    networks:
-      - tasi_network
-    profiles:
-      - monitoring
+    profiles: [monitoring]
+    networks: [tasi_net]
 
 volumes:
   postgres_data:
-    driver: local
+  clickhouse_data:
   redis_data:
-    driver: local
-  nginx_logs:
-    driver: local
-  prometheus_data:
-    driver: local
+  mlflow_data:
 
 networks:
-  tasi_network:
+  tasi_net:
     driver: bridge
-    ipam:
-      config:
-        - subnet: 172.20.0.0/16
-
