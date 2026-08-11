@@ -36,14 +36,22 @@ CREATE INDEX idx_users_role ON users(role) WHERE is_active;
 -- ---------------------------------------------------------------------------
 -- Companies / الشركات المدرجة في تاسي
 -- ---------------------------------------------------------------------------
+-- coverage_tier:
+--   basic    = ضمن تغطية 350+ (بيانات أساسية)
+--   advanced = ضمن 120 سهماً لنماذج ML المتقدمة (تحديث القائمة شهرياً)
+--   manual   = مضاف يدوياً من المستخدم/المسؤول
+CREATE TYPE coverage_tier AS ENUM ('basic', 'advanced', 'manual');
+
 CREATE TABLE companies (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    symbol          VARCHAR(16) NOT NULL UNIQUE,    -- e.g. 2222.SR
+    symbol          VARCHAR(16) NOT NULL UNIQUE,    -- الشكل الداخلي الموحّد: 2222 (بدون .SR)
+    symbol_lseg     VARCHAR(16) NOT NULL UNIQUE,    -- 2222.SR لـ LSEG
     name_ar         TEXT NOT NULL,
     name_en         TEXT NOT NULL,
     sector          VARCHAR(64) NOT NULL,
     market          VARCHAR(32) NOT NULL DEFAULT 'TASI',
     isin            VARCHAR(16),
+    coverage_tier   coverage_tier NOT NULL DEFAULT 'basic',
     is_active       BOOLEAN NOT NULL DEFAULT TRUE,
     created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -51,6 +59,7 @@ CREATE TABLE companies (
 
 CREATE INDEX idx_companies_sector ON companies(sector);
 CREATE INDEX idx_companies_active ON companies(is_active) WHERE is_active;
+CREATE INDEX idx_companies_coverage ON companies(coverage_tier) WHERE is_active;
 
 -- ---------------------------------------------------------------------------
 -- Portfolios / المحافظ
@@ -101,6 +110,8 @@ CREATE TABLE recommendations (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     company_id      UUID NOT NULL REFERENCES companies(id),
     model_version   TEXT NOT NULL,
+    horizon_days    SMALLINT NOT NULL DEFAULT 5
+                        CHECK (horizon_days IN (5, 10, 20)),  -- أساسي 5 + اختياري 10/20
     action          recommendation_action NOT NULL,
     confidence      NUMERIC(5, 4) NOT NULL CHECK (confidence >= 0 AND confidence <= 1),
     ensemble_score  NUMERIC(5, 4) NOT NULL,
@@ -118,6 +129,7 @@ CREATE TABLE recommendations (
 );
 
 CREATE INDEX idx_reco_company_time ON recommendations(company_id, generated_at DESC);
+CREATE INDEX idx_reco_horizon ON recommendations(company_id, horizon_days, generated_at DESC);
 CREATE INDEX idx_reco_action_conf ON recommendations(action, confidence DESC)
     WHERE status = 'active';
 CREATE INDEX idx_reco_shap ON recommendations USING GIN (shap_summary);
@@ -133,7 +145,7 @@ CREATE TABLE recommendation_outcomes (
 );
 
 -- ---------------------------------------------------------------------------
--- Audit Log (90 يوم احتفاظ تطبيقي + سياسة أرشفة)
+-- Audit Log — احتفاظ 5 سنوات (متطلب حوكمة / موافقة CMA المبدئية)
 -- ---------------------------------------------------------------------------
 CREATE TABLE audit_logs (
     id              BIGSERIAL PRIMARY KEY,
@@ -149,8 +161,7 @@ CREATE TABLE audit_logs (
 CREATE INDEX idx_audit_created ON audit_logs(created_at DESC);
 CREATE INDEX idx_audit_user ON audit_logs(user_id, created_at DESC);
 
--- تنظيف آلي اختياري عبر pg_cron / مهمة مجدولة
-COMMENT ON TABLE audit_logs IS 'Retention policy: 90 days then archive to cold storage';
+COMMENT ON TABLE audit_logs IS 'Retention policy: 5 years (CMA governance); archive cold after active window';
 
 -- ---------------------------------------------------------------------------
 -- updated_at trigger

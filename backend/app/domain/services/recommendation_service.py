@@ -11,6 +11,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.domain.symbols import normalize_symbol
 from app.infrastructure.cache.redis_client import redis_client
 from app.infrastructure.db.models import Company, Recommendation
 from app.schemas.stock import RecommendationResponse, ShapContribution
@@ -69,43 +70,52 @@ class RecommendationService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_by_symbol(self, symbol: str) -> RecommendationResponse:
-        cache_key = f"reco:{symbol.upper()}"
+    def get_by_symbol(self, symbol: str, horizon_days: int = 5) -> RecommendationResponse:
+        forms = normalize_symbol(symbol)
+        if horizon_days not in (5, 10, 20):
+            raise ValueError("horizon_days must be 5, 10, or 20")
+
+        cache_key = f"reco:{forms.bare}:{horizon_days}"
         cached = redis_client.get_json(cache_key)
         if isinstance(cached, dict):
             return RecommendationResponse.model_validate(cached)
 
-        company = self.db.scalar(select(Company).where(Company.symbol == symbol.upper()))
+        company = self.db.scalar(
+            select(Company).where(
+                (Company.symbol == forms.bare) | (Company.symbol_lseg == forms.lseg)
+            )
+        )
         if company is None:
-            raise LookupError(f"Symbol not found: {symbol}")
+            raise LookupError(f"Symbol not found: {forms.display}")
 
-        # Latest persisted recommendation
         reco = self.db.scalar(
             select(Recommendation)
-            .where(Recommendation.company_id == company.id, Recommendation.status == "active")
+            .where(
+                Recommendation.company_id == company.id,
+                Recommendation.status == "active",
+                Recommendation.horizon_days == horizon_days,
+            )
             .order_by(Recommendation.generated_at.desc())
             .limit(1)
         )
         if reco is not None:
-            response = self._to_response(company.symbol, reco)
+            response = self._to_response(forms.display, reco)
             redis_client.set_json(cache_key, response.model_dump(mode="json"), ttl_seconds=300)
             return response
 
-        # On-the-fly ensemble stub when no stored reco (wired to live inference in production)
-        response = self._infer_live(company.symbol)
+        response = self._infer_live(forms.display, horizon_days=horizon_days)
         redis_client.set_json(cache_key, response.model_dump(mode="json"), ttl_seconds=300)
         return response
 
-    def _infer_live(self, symbol: str) -> RecommendationResponse:
+    def _infer_live(self, symbol: str, horizon_days: int = 5) -> RecommendationResponse:
         """
         Placeholder for Inference Service call.
-        في الإنتاج: استدعاء خدمة الاستدلال (MLflow champion) + آخر ATR من ClickHouse.
+        في الإنتاج: استدعاء خدمة الاستدلال (MLflow champion) لأفق 5/10/20 + ATR من ClickHouse.
         """
-        # Neutral priors until models are loaded — replace with real scores
         xgb, lstm, prophet, sentiment = 0.62, 0.58, 0.55, 0.10
         score = combine_scores(xgb, lstm, prophet, sentiment_to_unit_interval(sentiment))
         action = classify_action(score)
-        entry = 100.0  # replaced by live quote in stock service integration
+        entry = 100.0
         atr = 1.5
         stops = compute_stops(entry, atr, action)
         shap = [
@@ -116,11 +126,13 @@ class RecommendationService:
         explanation = build_arabic_explanation(
             action, score, [s.model_dump() for s in shap]  # type: ignore[arg-type]
         )
+        explanation = f"{explanation} أفق التحليل: {horizon_days} أيام تداول."
         return RecommendationResponse(
             symbol=symbol,
             action=action,  # type: ignore[arg-type]
             confidence=score,
             ensemble_score=score,
+            horizon_days=horizon_days,  # type: ignore[arg-type]
             entry_price=stops["entry_price"],
             stop_loss=stops["stop_loss"],
             take_profit=stops["take_profit"],
@@ -130,6 +142,7 @@ class RecommendationService:
             explanation_ar=explanation,
             model_version=settings.MODEL_ENSEMBLE_VERSION,
             generated_at=datetime.now(timezone.utc),
+            disclaimer_ar=settings.LEGAL_DISCLAIMER_AR,
         )
 
     @staticmethod
@@ -148,6 +161,7 @@ class RecommendationService:
             action=reco.action,  # type: ignore[arg-type]
             confidence=float(reco.confidence),
             ensemble_score=float(reco.ensemble_score),
+            horizon_days=int(reco.horizon_days),  # type: ignore[arg-type]
             entry_price=float(reco.entry_price),
             stop_loss=float(reco.stop_loss),
             take_profit=float(reco.take_profit),
@@ -157,4 +171,5 @@ class RecommendationService:
             explanation_ar=reco.explanation_ar,
             model_version=reco.model_version,
             generated_at=reco.generated_at,
+            disclaimer_ar=settings.LEGAL_DISCLAIMER_AR,
         )

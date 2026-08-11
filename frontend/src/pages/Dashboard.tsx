@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
+import { LegalDisclaimer } from "../components/LegalDisclaimer";
 import { PriceChart } from "../components/PriceChart";
 import { fetchMarketOverview, fetchRecommendations } from "../services/api";
 import type { Candle, MarketOverview, Recommendation } from "../types/market";
 
 const SECTORS = ["الكل", "الطاقة", "البنوك", "المواد الأساسية", "الاتصالات", "الرعاية الصحية"];
 const RISK_LEVELS = ["الكل", "low", "medium", "high"] as const;
+const HORIZONS = [5, 10, 20] as const;
 
 const DEMO_CANDLES: Candle[] = Array.from({ length: 60 }, (_, i) => {
   const base = 30 + Math.sin(i / 7) * 2 + i * 0.02;
@@ -24,7 +26,7 @@ const DEMO_CANDLES: Candle[] = Array.from({ length: 60 }, (_, i) => {
 
 const DEMO_RECOS: Recommendation[] = [
   {
-    symbol: "2222.SR",
+    symbol: "2222",
     name_ar: "أرامكو السعودية",
     sector: "الطاقة",
     action: "strong_buy",
@@ -36,7 +38,7 @@ const DEMO_RECOS: Recommendation[] = [
     take_profit: 31.65,
   },
   {
-    symbol: "1120.SR",
+    symbol: "1120",
     name_ar: "مصرف الراجحي",
     sector: "البنوك",
     action: "buy",
@@ -48,7 +50,7 @@ const DEMO_RECOS: Recommendation[] = [
     take_profit: 94.2,
   },
   {
-    symbol: "2010.SR",
+    symbol: "2010",
     name_ar: "سابك",
     sector: "المواد الأساسية",
     action: "hold",
@@ -60,7 +62,7 @@ const DEMO_RECOS: Recommendation[] = [
     take_profit: 79.25,
   },
   {
-    symbol: "1180.SR",
+    symbol: "1180",
     name_ar: "الأهلي السعودي",
     sector: "البنوك",
     action: "sell",
@@ -85,7 +87,8 @@ export function Dashboard() {
   const [recos, setRecos] = useState<Recommendation[]>(DEMO_RECOS);
   const [sector, setSector] = useState("الكل");
   const [risk, setRisk] = useState<(typeof RISK_LEVELS)[number]>("الكل");
-  const [selected, setSelected] = useState("2222.SR");
+  const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(5);
+  const [selected, setSelected] = useState("2222");
 
   useEffect(() => {
     let alive = true;
@@ -93,14 +96,14 @@ export function Dashboard() {
       const mkt = await fetchMarketOverview();
       if (!alive) return;
       setOverview(mkt);
-      const live = await fetchRecommendations();
+      const live = await fetchRecommendations(horizon);
       if (!alive) return;
       if (live.length) setRecos(live);
     })();
     return () => {
       alive = false;
     };
-  }, []);
+  }, [horizon]);
 
   const filtered = useMemo(() => {
     return recos
@@ -113,12 +116,17 @@ export function Dashboard() {
     <div className="dash">
       <header className="dash__brand">
         <div>
-          <p className="dash__eyebrow">منصة تحليل مؤسسية</p>
-          <h1 className="dash__logo">TASI Insight</h1>
-          <p className="dash__tag">توصيات تاسي بشفافية نماذج Ensemble وتفسير SHAP</p>
+          <p className="dash__eyebrow">أدوات تحليل سوق الأسهم السعودي</p>
+          <h1 className="dash__logo">تاسي فيجن</h1>
+          <p className="dash__logo-en">TASI Vision</p>
+          <p className="dash__tag">
+            تحليلات Ensemble شفافة مع تفسير SHAP — أفق {horizon} أيام · تحديث 06:00 ومنتصف النهار
+          </p>
         </div>
         <div className="dash__pulse" aria-hidden />
       </header>
+
+      <LegalDisclaimer />
 
       <section className="dash__overview" aria-label="مؤشرات السوق">
         <div className="metric">
@@ -140,9 +148,7 @@ export function Dashboard() {
         <div className="metric">
           <span>السيولة</span>
           <strong>
-            {overview
-              ? `${(overview.volume_total / 1e9).toFixed(2)} مليار`
-              : "—"}
+            {overview ? `${(overview.volume_total / 1e9).toFixed(2)} مليار` : "—"}
           </strong>
         </div>
       </section>
@@ -167,21 +173,32 @@ export function Dashboard() {
             <option value="high">مرتفع</option>
           </select>
         </label>
+        <label>
+          أفق التوصية
+          <select
+            value={horizon}
+            onChange={(e) => setHorizon(Number(e.target.value) as (typeof HORIZONS)[number])}
+          >
+            <option value={5}>5 أيام (أساسي)</option>
+            <option value={10}>10 أيام</option>
+            <option value={20}>20 يوم</option>
+          </select>
+        </label>
       </section>
 
       <div className="dash__grid">
         <section className="dash__chart-panel" aria-label="الرسم البياني">
           <div className="panel-head">
             <h2>{selected}</h2>
-            <p>TradingView Lightweight Charts</p>
+            <p>TradingView Lightweight Charts · تسعير SAHMK أثناء الجلسة</p>
           </div>
           <PriceChart candles={DEMO_CANDLES} />
         </section>
 
         <section className="dash__reco-panel" aria-label="قائمة التوصيات">
           <div className="panel-head">
-            <h2>التوصيات</h2>
-            <p>مرتبة حسب الثقة</p>
+            <h2>التحليلات</h2>
+            <p>مرتبة حسب الثقة · أفق {horizon} أيام</p>
           </div>
           <ul className="reco-list">
             {filtered.map((r) => (
@@ -206,7 +223,7 @@ export function Dashboard() {
                 </button>
               </li>
             ))}
-            {!filtered.length && <li className="empty">لا توجد توصيات مطابقة للفلتر</li>}
+            {!filtered.length && <li className="empty">لا توجد نتائج مطابقة للفلتر</li>}
           </ul>
         </section>
       </div>

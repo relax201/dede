@@ -30,10 +30,10 @@ export function PriceChart({ candles }: Props) {
     });
 
     const series = chart.addCandlestickSeries({
-      upColor: "#3dba8a",
+      upColor: "#1A7A4E",
       downColor: "#e85d4c",
       borderVisible: false,
-      wickUpColor: "#3dba8a",
+      wickUpColor: "#1A7A4E",
       wickDownColor: "#e85d4c",
     });
 

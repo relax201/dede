@@ -14,7 +14,6 @@ export async function fetchMarketOverview(): Promise<MarketOverview> {
   try {
     return await getJson<MarketOverview>("/api/market/overview");
   } catch {
-    // Dev fallback until market overview endpoint is wired
     return {
       tasi_index: 11842.35,
       tasi_change_pct: 0.42,
@@ -25,9 +24,9 @@ export async function fetchMarketOverview(): Promise<MarketOverview> {
   }
 }
 
-export async function fetchRecommendations(): Promise<Recommendation[]> {
-  // Aggregated list endpoint can be added later; compose from known symbols for demo shell
-  const symbols = ["2222.SR", "1120.SR", "2010.SR", "1180.SR", "1010.SR"];
+export async function fetchRecommendations(horizon: number = 5): Promise<Recommendation[]> {
+  // رموز داخلية موحّدة بدون .SR (SAHMK / MarketAux)
+  const symbols = ["2222", "1120", "2010", "1180", "1010"];
   const results: Recommendation[] = [];
   for (const symbol of symbols) {
     try {
@@ -39,7 +38,7 @@ export async function fetchRecommendations(): Promise<Recommendation[]> {
         entry_price: number;
         stop_loss: number;
         take_profit: number;
-      }>(`/api/recommendation/${symbol}`);
+      }>(`/api/recommendation/${symbol}?horizon=${horizon}`);
       results.push({
         symbol: reco.symbol,
         sector: "غير محدد",

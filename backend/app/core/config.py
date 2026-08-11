@@ -1,4 +1,4 @@
-"""Application settings / إعدادات التطبيق"""
+"""Application settings / إعدادات تطبيق تاسي فيجن (TASI Vision)"""
 
 from __future__ import annotations
 
@@ -12,8 +12,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    APP_NAME: str = "منصة تحليل الأسهم السعودية — TASI AI"
-    APP_VERSION: str = "2.0.0"
+    # Brand
+    APP_NAME: str = "تاسي فيجن — TASI Vision"
+    APP_VERSION: str = "2.1.0"
+    BRAND_NAME_AR: str = "تاسي فيجن"
+    BRAND_NAME_EN: str = "TASI Vision"
     DEBUG: bool = False
     API_V1_STR: str = "/api"
     TIMEZONE: str = "Asia/Riyadh"
@@ -23,19 +26,62 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     RATE_LIMIT_PER_MINUTE: int = 100
+    AES_256_KEY_BASE64: str = ""
+    AUDIT_RETENTION_YEARS: int = 5  # CMA / حوكمة: 5 سنوات وليس 90 يوماً
 
     # Databases
     DATABASE_URL: str
     CLICKHOUSE_URL: str = "clickhouse://default:@clickhouse:9000/tasi"
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # External APIs
+    # Primary live: SAHMK WebSocket every 3s
     SAHMK_API_KEY: str = ""
     SAHMK_BASE_URL: str = "https://api.sahmk.example/v1"
+    SAHMK_WS_URL: str = "wss://ws.sahmk.example/v1/stream"
+    SAHMK_RATE_LIMIT_PER_MINUTE: int = 1000
+    SAHMK_TICK_INTERVAL_SECONDS: int = 3
+
+    # LSEG — historical + live failover (every 10s)
     LSEG_API_KEY: str = ""
     LSEG_BASE_URL: str = "https://api.refinitiv.com"
+    LSEG_RATE_LIMIT_PER_HOUR: int = 2000
+    LSEG_FAILOVER_INTERVAL_SECONDS: int = 10
+
+    # MarketAux — news/sentiment
     MARKETAUX_API_KEY: str = ""
     MARKETAUX_BASE_URL: str = "https://api.marketaux.com/v1"
+    MARKETAUX_RATE_LIMIT_PER_MINUTE: int = 200
+
+    # Backup providers
+    TADAWUL_API_KEY: str = ""
+    TADAWUL_BASE_URL: str = "https://api.tadawul.com.sa"
+    ALPHA_VANTAGE_API_KEY: str = ""
+    ALPHA_VANTAGE_BASE_URL: str = "https://www.alphavantage.co/query"
+
+    # Coverage
+    COVERAGE_BASIC_TARGET: int = 350
+    COVERAGE_ADVANCED_TARGET: int = 120
+
+    # Recommendation horizons
+    FORWARD_HORIZON_DEFAULT: int = 5
+    FORWARD_HORIZONS: str = "5,10,20"  # comma-separated
+    RECO_CRON_MORNING: str = "0 6 * * 0-4"  # 06:00 Asia/Riyadh Sun–Thu
+    RECO_CRON_MIDDAY: str = "0 12 * * 0-4"
+
+    # Compliance — أدوات تحليل مع إخلاء مسؤولية
+    COMPLIANCE_MODE: Literal["analysis_disclaimer"] = "analysis_disclaimer"
+    CMA_PRELIMINARY_APPROVAL: bool = True
+    LEGAL_DISCLAIMER_AR: str = (
+        "تاسي فيجن أداة تحليل مساعدة ولا تشكّل توصية استثمارية شخصية أو عرضاً للشراء أو البيع. "
+        "الأداء السابق لا يضمن النتائج المستقبلية. تتحمّل وحدك مسؤولية قراراتك الاستثمارية. "
+        "تم الحصول على موافقة مبدئية من هيئة السوق المالية (CMA) لعرض أدوات التحليل مع إخلاء المسؤولية."
+    )
+
+    # Cloud
+    AWS_REGION_PRIMARY: str = "me-south-1"
+    AWS_REGION_DR: str = "eu-central-1"
+    MONTHLY_BUDGET_USD_MIN: int = 2000
+    MONTHLY_BUDGET_USD_MAX: int = 3000
 
     # ML
     MLFLOW_TRACKING_URI: str = "http://mlflow:5000"
@@ -54,6 +100,10 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+
+    @property
+    def forward_horizons(self) -> list[int]:
+        return [int(x.strip()) for x in self.FORWARD_HORIZONS.split(",") if x.strip()]
 
     @field_validator("RISK_PER_TRADE")
     @classmethod

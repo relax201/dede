@@ -11,6 +11,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     Numeric,
     String,
     Text,
@@ -45,11 +46,13 @@ class Company(Base):
     __tablename__ = "companies"
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    symbol: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)
+    symbol: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)  # bare: 2222
+    symbol_lseg: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)  # 2222.SR
     name_ar: Mapped[str] = mapped_column(Text, nullable=False)
     name_en: Mapped[str] = mapped_column(Text, nullable=False)
     sector: Mapped[str] = mapped_column(String(64), nullable=False)
     market: Mapped[str] = mapped_column(String(32), default="TASI")
+    coverage_tier: Mapped[str] = mapped_column(String(16), default="basic")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
@@ -91,6 +94,7 @@ class Recommendation(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     company_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("companies.id"))
     model_version: Mapped[str] = mapped_column(Text, nullable=False)
+    horizon_days: Mapped[int] = mapped_column(Integer, default=5)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     confidence: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)
     ensemble_score: Mapped[Decimal] = mapped_column(Numeric(5, 4), nullable=False)

@@ -24,7 +24,7 @@ async def get_stock(
 ) -> StockResponse:
     service = StockService(db)
     try:
-        return service.get_stock(symbol)
+        return await service.get_stock(symbol)
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001

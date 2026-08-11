@@ -34,8 +34,8 @@ app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description=(
-        "منصة تحليل سوق الأسهم السعودي (تاسي) مع توصيات Ensemble وتفسير SHAP. "
-        "التوثيق التلقائي عبر OpenAPI/Swagger."
+        "تاسي فيجن (TASI Vision) — أدوات تحليل لسوق الأسهم السعودي مع نماذج Ensemble وتفسير SHAP. "
+        "لا تشكّل توصية استثمارية شخصية. التوثيق عبر OpenAPI/Swagger."
     ),
     docs_url="/docs",
     redoc_url="/redoc",
@@ -73,11 +73,28 @@ async def root() -> dict:
     return {
         "success": True,
         "app": settings.APP_NAME,
+        "brand_ar": settings.BRAND_NAME_AR,
+        "brand_en": settings.BRAND_NAME_EN,
         "version": settings.APP_VERSION,
         "docs": "/docs",
+        "compliance": {
+            "mode": settings.COMPLIANCE_MODE,
+            "cma_preliminary_approval": settings.CMA_PRELIMINARY_APPROVAL,
+            "disclaimer_ar": settings.LEGAL_DISCLAIMER_AR,
+            "audit_retention_years": settings.AUDIT_RETENTION_YEARS,
+        },
+        "coverage": {
+            "basic_target": settings.COVERAGE_BASIC_TARGET,
+            "advanced_target": settings.COVERAGE_ADVANCED_TARGET,
+        },
+        "horizons": settings.forward_horizons,
+        "cloud": {
+            "primary": settings.AWS_REGION_PRIMARY,
+            "dr": settings.AWS_REGION_DR,
+        },
         "endpoints": {
             "stock": f"{settings.API_V1_STR}/stock/{{symbol}}",
-            "recommendation": f"{settings.API_V1_STR}/recommendation/{{symbol}}",
+            "recommendation": f"{settings.API_V1_STR}/recommendation/{{symbol}}?horizon=5",
             "portfolio": f"{settings.API_V1_STR}/portfolio",
             "portfolio_performance": f"{settings.API_V1_STR}/portfolio/{{id}}/performance",
             "websocket": "/ws/live",

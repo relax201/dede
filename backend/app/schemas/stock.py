@@ -48,6 +48,7 @@ class RecommendationResponse(BaseModel):
     action: Literal["strong_buy", "buy", "hold", "sell"]
     confidence: float = Field(ge=0, le=1)
     ensemble_score: float = Field(ge=0, le=1)
+    horizon_days: Literal[5, 10, 20] = 5
     entry_price: float
     stop_loss: float
     take_profit: float
@@ -57,6 +58,7 @@ class RecommendationResponse(BaseModel):
     explanation_ar: str
     model_version: str
     generated_at: datetime
+    disclaimer_ar: str | None = None
 
 
 class HoldingCreate(BaseModel):
