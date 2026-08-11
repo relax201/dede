@@ -102,6 +102,75 @@ class SahmkClient:
             return list(payload.get("data", payload.get("quotes", [])))
         return []
 
+    async def list_companies(
+        self,
+        market: str = "TASI",
+        limit: int = 50,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """GET /companies/?market=TASI"""
+        if not self.configured:
+            raise RuntimeError("SAHMK_API_KEY is not configured")
+        url = f"{self.base_url}/companies/"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"market": market, "limit": limit, "offset": offset, "status": "active"},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def iter_all_companies(self, market: str = "TASI", page_size: int = 50) -> list[dict[str, Any]]:
+        """Paginate all active companies for a market."""
+        out: list[dict[str, Any]] = []
+        offset = 0
+        while True:
+            page = await self.list_companies(market=market, limit=page_size, offset=offset)
+            rows = page.get("results") or []
+            if not rows:
+                break
+            out.extend(rows)
+            total = int(page.get("total") or 0)
+            offset += len(rows)
+            if total and offset >= total:
+                break
+            if len(rows) < page_size:
+                break
+        return out
+
+    async def get_company(self, symbol: str) -> dict[str, Any]:
+        """GET /company/{symbol}/ — includes sector names."""
+        if not self.configured:
+            raise RuntimeError("SAHMK_API_KEY is not configured")
+        bare = to_provider_symbol(symbol, "sahmk")
+        url = f"{self.base_url}/company/{bare}/"
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.get(url, headers=self._headers())
+            resp.raise_for_status()
+            return resp.json()
+
+    async def get_historical(
+        self,
+        symbol: str,
+        interval: str = "1d",
+        limit: int = 365,
+        offset: int = 0,
+    ) -> dict[str, Any]:
+        """GET /historical/{symbol}/ — OHLCV bars."""
+        if not self.configured:
+            raise RuntimeError("SAHMK_API_KEY is not configured")
+        bare = to_provider_symbol(symbol, "sahmk")
+        url = f"{self.base_url}/historical/{bare}/"
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"interval": interval, "limit": limit, "offset": offset},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
 
 def _parse_ts(value: Any) -> datetime:
     if value is None:

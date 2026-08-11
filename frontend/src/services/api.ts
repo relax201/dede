@@ -1,4 +1,4 @@
-import type { MarketOverview, Recommendation } from "../types/market";
+import type { Candle, MarketOverview, Recommendation } from "../types/market";
 
 const API_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
 
@@ -15,17 +15,27 @@ export async function fetchMarketOverview(): Promise<MarketOverview> {
     return await getJson<MarketOverview>("/api/market/overview");
   } catch {
     return {
-      tasi_index: 11842.35,
-      tasi_change_pct: 0.42,
-      advancers: 98,
-      decliners: 71,
-      volume_total: 3.2e9,
+      tasi_index: 0,
+      tasi_change_pct: 0,
+      advancers: 0,
+      decliners: 0,
+      volume_total: 0,
     };
   }
 }
 
+export async function fetchCandles(symbol: string, limit = 120): Promise<Candle[]> {
+  try {
+    const data = await getJson<{ candles: Candle[] }>(
+      `/api/stock/${encodeURIComponent(symbol)}/candles?interval=1d&limit=${limit}`
+    );
+    return data.candles ?? [];
+  } catch {
+    return [];
+  }
+}
+
 export async function fetchRecommendations(horizon: number = 5): Promise<Recommendation[]> {
-  // رموز داخلية موحّدة بدون .SR (SAHMK / MarketAux)
   const symbols = ["2222", "1120", "2010", "1180", "1010"];
   const results: Recommendation[] = [];
   for (const symbol of symbols) {

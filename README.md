@@ -212,8 +212,11 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 
 - ✅ **SAHMK REST** مربوط
 - ✅ **SAHMK WebSocket** مفعّل بأوسع تغذية للخطة الحالية (**60 رمزاً** على Pro؛ `*` يتطلب Enterprise)
+- ✅ **مزامنة شركات تاسي** (`POST /api/companies/sync`) — ~270 شركة
+- ✅ **شموع تاريخية** (`GET /api/stock/{symbol}/candles`) + تسخين الكون
+- ✅ **Dashboard** مربوط بـ `/ws/live` والشموع الحقيقية
 - ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY`
-- ⏳ حساب AWS في `me-south-1`
+- ⏳ تدريب النماذج على البيانات التاريخية + نشر AWS
 
 ```bash
 # فحص بث سهمك مباشرة

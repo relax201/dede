@@ -1,4 +1,6 @@
 .env
+data/ohlcv/
+data/companies_tasi.json
 .venv/
 venv/
 __pycache__/
