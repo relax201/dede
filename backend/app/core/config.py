@@ -40,6 +40,11 @@ class Settings(BaseSettings):
     SAHMK_WS_URL: str = "wss://api.sahmk.sa/ws/v1/stocks/"
     SAHMK_RATE_LIMIT_PER_MINUTE: int = 1000
     SAHMK_TICK_INTERVAL_SECONDS: int = 3
+    # WebSocket: Enterprise may use symbols=["*"]; otherwise seed list
+    SAHMK_WS_ENABLED: bool = True
+    SAHMK_WS_SUBSCRIBE_ALL: bool = False
+    SAHMK_WS_SEED_SYMBOLS: str = "2222,1120,1180,1010,2010,1211,7010,7020,2280,4030"
+    SAHMK_WS_PING_INTERVAL_SECONDS: float = 20.0
 
     # LSEG — historical + live failover (every 10s)
     LSEG_API_KEY: str = ""
@@ -104,6 +109,10 @@ class Settings(BaseSettings):
     @property
     def forward_horizons(self) -> list[int]:
         return [int(x.strip()) for x in self.FORWARD_HORIZONS.split(",") if x.strip()]
+
+    @property
+    def sahmk_ws_seed_symbols(self) -> list[str]:
+        return [s.strip() for s in self.SAHMK_WS_SEED_SYMBOLS.split(",") if s.strip()]
 
     @field_validator("RISK_PER_TRADE")
     @classmethod

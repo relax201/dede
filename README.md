@@ -208,12 +208,19 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 | هوية | تاسي فيجن · `#1A7A4E` / `#0A4D8C` / `#C9A84C` · وزير + Inter |
 | تسعير محفظة | جلسة=SAHMK · إغلاق=LSEG · فشل=Redis |
 
-### ما يزال مطلوباً للربط الحي (مفاتيح فقط)
+### حالة الربط الحي
 
-- قيم `SAHMK_API_KEY` / `SAHMK_WS_URL` الفعلية من بوابة Enterprise
-- `LSEG_API_KEY` ونقاط الـ endpoint النهائية لحساب Pro
-- `MARKETAUX_API_KEY` و `TADAWUL_API_KEY`
-- حساب AWS في `me-south-1` وصلاحيات IAM للـ EKS
+- ✅ **SAHMK REST** مربوط
+- ✅ **SAHMK WebSocket** مفعّل (`SahmkStockStream` → Redis + `/ws/live`)
+- ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY`
+- ⏳ حساب AWS في `me-south-1`
+
+```bash
+# فحص بث سهمك مباشرة
+PYTHONPATH=.:backend python scripts/smoke_sahmk_ws.py
+# حالة البث عبر API
+curl -s http://localhost:8000/api/stream/status
+```
 
 ---
 

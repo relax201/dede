@@ -1,6 +1,5 @@
 """
-FastAPI entrypoint — TASI AI Platform
-نقطة تشغيل الواجهة الخلفية (Clean Architecture)
+FastAPI entrypoint — تاسي فيجن (TASI Vision)
 """
 
 from __future__ import annotations
@@ -26,7 +25,35 @@ logger = logging.getLogger("tasi.api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
+    stream = None
+    if settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY:
+        from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
+        from app.infrastructure.external.sahmk_ws import SahmkStockStream
+        from app.infrastructure.messaging.live_bridge import (
+            handle_sahmk_event,
+            handle_sahmk_quote,
+        )
+
+        stream = SahmkStockStream(
+            on_quote=handle_sahmk_quote,
+            on_event=handle_sahmk_event,
+            ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
+        )
+        sahmk_ws_mod.sahmk_stream = stream
+        stream.start()
+        logger.info(
+            "SAHMK WebSocket stream starting (subscribe_all=%s, seeds=%s)",
+            settings.SAHMK_WS_SUBSCRIBE_ALL,
+            settings.sahmk_ws_seed_symbols,
+        )
+    else:
+        logger.warning("SAHMK WebSocket disabled or SAHMK_API_KEY missing")
+
     yield
+
+    if stream is not None:
+        logger.info("Stopping SAHMK WebSocket stream")
+        await stream.stop()
     logger.info("Shutting down API")
 
 
@@ -97,6 +124,7 @@ async def root() -> dict:
             "recommendation": f"{settings.API_V1_STR}/recommendation/{{symbol}}?horizon=5",
             "portfolio": f"{settings.API_V1_STR}/portfolio",
             "portfolio_performance": f"{settings.API_V1_STR}/portfolio/{{id}}/performance",
+            "stream_status": f"{settings.API_V1_STR}/stream/status",
             "websocket": "/ws/live",
         },
     }
