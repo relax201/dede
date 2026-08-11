@@ -211,7 +211,7 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 ### حالة الربط الحي
 
 - ✅ **SAHMK REST** مربوط
-- ✅ **SAHMK WebSocket** مفعّل (`SahmkStockStream` → Redis + `/ws/live`)
+- ✅ **SAHMK WebSocket** مفعّل بأوسع تغذية للخطة الحالية (**60 رمزاً** على Pro؛ `*` يتطلب Enterprise)
 - ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY`
 - ⏳ حساب AWS في `me-south-1`
 
