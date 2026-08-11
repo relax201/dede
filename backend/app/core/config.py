@@ -34,10 +34,10 @@ class Settings(BaseSettings):
     CLICKHOUSE_URL: str = "clickhouse://default:@clickhouse:9000/tasi"
     REDIS_URL: str = "redis://redis:6379/0"
 
-    # Primary live: SAHMK WebSocket every 3s
+    # Primary live: SAHMK (سهمك) — https://www.sahmk.sa/en/developers/docs
     SAHMK_API_KEY: str = ""
-    SAHMK_BASE_URL: str = "https://api.sahmk.example/v1"
-    SAHMK_WS_URL: str = "wss://ws.sahmk.example/v1/stream"
+    SAHMK_BASE_URL: str = "https://api.sahmk.sa/api/v1"
+    SAHMK_WS_URL: str = "wss://api.sahmk.sa/ws/v1/stocks/"
     SAHMK_RATE_LIMIT_PER_MINUTE: int = 1000
     SAHMK_TICK_INTERVAL_SECONDS: int = 3
 

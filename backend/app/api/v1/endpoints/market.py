@@ -13,4 +13,4 @@ router = APIRouter(tags=["market"])
 
 @router.get("/market/overview", response_model=MarketOverview, summary="نظرة عامة على السوق")
 async def market_overview(db: DbSession, _: None = Depends(rate_limit)) -> MarketOverview:
-    return StockService(db).market_overview()
+    return await StockService(db).market_overview()

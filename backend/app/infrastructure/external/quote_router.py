@@ -72,7 +72,7 @@ class QuoteRouter:
         return self._from_redis_or_raise(bare)
 
     async def _after_close(self, bare: str) -> LiveQuote:
-        # Official close from LSEG preferred
+        # Official close from LSEG preferred; SAHMK last print as practical fallback
         if self.lseg.configured:
             try:
                 quote = await self.lseg.get_quote(bare)
@@ -80,6 +80,15 @@ class QuoteRouter:
                 return quote
             except Exception as exc:  # noqa: BLE001
                 logger.warning("After-close LSEG failed for %s: %s", bare, exc)
+
+        if self.sahmk.configured:
+            try:
+                quote = await self.sahmk.get_quote(bare)
+                self._cache(quote)
+                return quote
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("After-close SAHMK fallback failed for %s: %s", bare, exc)
+
         return self._from_redis_or_raise(bare)
 
     def _cache(self, quote: LiveQuote) -> None:

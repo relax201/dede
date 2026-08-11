@@ -1,4 +1,4 @@
-"""Stock quote + indicators service — uses QuoteRouter failover chain"""
+"""Stock quote + indicators service — uses QuoteRouter / SAHMK"""
 
 from __future__ import annotations
 
@@ -12,25 +12,35 @@ from app.domain.symbols import normalize_symbol
 from app.infrastructure.cache.redis_client import redis_client
 from app.infrastructure.db.models import Company
 from app.infrastructure.external.quote_router import QuoteRouter
+from app.infrastructure.external.sahmk_client import SahmkClient
 from app.schemas.stock import IndicatorSnapshot, MarketOverview, StockResponse
 
 logger = logging.getLogger(__name__)
 
 
 class StockService:
-    def __init__(self, db: Session, quotes: QuoteRouter | None = None) -> None:
+    def __init__(
+        self,
+        db: Session,
+        quotes: QuoteRouter | None = None,
+        sahmk: SahmkClient | None = None,
+    ) -> None:
         self.db = db
         self.quotes = quotes or QuoteRouter()
+        self.sahmk = sahmk or SahmkClient()
 
     async def get_stock(self, symbol: str) -> StockResponse:
         forms = normalize_symbol(symbol)
         company = self.db.scalar(
             select(Company).where(
-                (Company.symbol == forms.bare) | (Company.symbol == forms.lseg)
+                (Company.symbol == forms.bare) | (Company.symbol_lseg == forms.lseg)
             )
         )
-        if company is None:
-            raise LookupError(f"Symbol not found: {forms.display}")
+
+        # Enrich from SAHMK even if company row missing (first-time symbol)
+        name_ar = company.name_ar if company else forms.display
+        name_en = company.name_en if company else forms.display
+        sector = company.sector if company else "غير محدد"
 
         indicators_raw = redis_client.get_json(f"indicators:{forms.bare}:1d") or {}
         indicators = IndicatorSnapshot.model_validate(
@@ -39,11 +49,16 @@ class StockService:
 
         try:
             quote = await self.quotes.get_quote(forms.bare)
+            raw = quote.raw or {}
+            if raw.get("name"):
+                name_ar = str(raw["name"])
+            if raw.get("name_en"):
+                name_en = str(raw["name_en"])
             return StockResponse(
                 symbol=forms.display,
-                name_ar=company.name_ar,
-                name_en=company.name_en,
-                sector=company.sector,
+                name_ar=name_ar,
+                name_en=name_en,
+                sector=sector,
                 price=quote.price,
                 change_pct=quote.change_pct,
                 volume=quote.volume,
@@ -54,12 +69,14 @@ class StockService:
                 stale=quote.stale,
             )
         except LookupError:
+            if company is None:
+                raise LookupError(f"Symbol not found: {forms.display}") from None
             logger.warning("All quote sources failed for %s", forms.bare)
             return StockResponse(
                 symbol=forms.display,
-                name_ar=company.name_ar,
-                name_en=company.name_en,
-                sector=company.sector,
+                name_ar=name_ar,
+                name_en=name_en,
+                sector=sector,
                 price=0.0,
                 change_pct=0.0,
                 volume=0.0,
@@ -68,10 +85,31 @@ class StockService:
                 stale=True,
             )
 
-    def market_overview(self) -> MarketOverview:
+    async def market_overview(self) -> MarketOverview:
         cached = redis_client.get_json("market:overview")
         if isinstance(cached, dict):
             return MarketOverview.model_validate(cached)
+
+        if self.sahmk.configured:
+            try:
+                summary = await self.sahmk.get_market_summary("TASI")
+                overview = MarketOverview(
+                    tasi_index=float(summary.get("index_value", 0.0)),
+                    tasi_change_pct=float(summary.get("index_change_percent", 0.0)),
+                    advancers=int(summary.get("advancing", 0)),
+                    decliners=int(summary.get("declining", 0)),
+                    volume_total=float(summary.get("total_volume", 0.0)),
+                    updated_at=_parse_ts(summary.get("timestamp")),
+                )
+                redis_client.set_json(
+                    "market:overview",
+                    overview.model_dump(mode="json"),
+                    ttl_seconds=15,
+                )
+                return overview
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("SAHMK market summary failed: %s", exc)
+
         return MarketOverview(
             tasi_index=0.0,
             tasi_change_pct=0.0,
@@ -80,3 +118,12 @@ class StockService:
             volume_total=0.0,
             updated_at=datetime.now(timezone.utc),
         )
+
+
+def _parse_ts(value: object) -> datetime:
+    if value is None:
+        return datetime.now(timezone.utc)
+    try:
+        return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return datetime.now(timezone.utc)
