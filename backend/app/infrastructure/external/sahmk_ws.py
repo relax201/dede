@@ -78,16 +78,18 @@ class SahmkStockStream:
         ]
         self.ping_interval = ping_interval
         self.max_backoff = max_backoff
+        self.max_symbols = settings.SAHMK_WS_MAX_SYMBOLS
 
-        self._desired: set[str] = set(self.seed_symbols)
+        self._desired_ordered: list[str] = list(dict.fromkeys(self.seed_symbols))
+        self._desired: set[str] = set(self._desired_ordered)
         self._ws: ClientConnection | None = None
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._connected = asyncio.Event()
         self._lock = asyncio.Lock()
         self._limits: dict[str, Any] = {
-            "max_symbols_per_connection": 120,
-            "max_symbols_per_call": 40,
+            "max_symbols_per_connection": 60,
+            "max_symbols_per_call": 20,
         }
         self.stats: dict[str, Any] = {
             "connected": False,
@@ -96,7 +98,9 @@ class SahmkStockStream:
             "last_quote_at": None,
             "last_error": None,
             "reconnects": 0,
-            "subscribed": [],
+            "subscribed": list(self._desired_ordered),
+            "universe_size": len(self._desired_ordered),
+            "mode": "wildcard" if self.subscribe_all else "universe",
         }
 
     @property
@@ -137,17 +141,59 @@ class SahmkStockStream:
         self.stats["connected"] = False
         self._connected.clear()
 
+    def set_universe(self, symbols: list[str]) -> None:
+        """Replace desired subscription set (truncated to plan/connection cap)."""
+        cap = min(self.max_symbols, int(self._limits.get("max_symbols_per_connection") or self.max_symbols))
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw in symbols:
+            try:
+                bare = normalize_symbol(raw).bare
+            except ValueError:
+                continue
+            if bare not in seen:
+                seen.add(bare)
+                ordered.append(bare)
+        self._desired_ordered = ordered[:cap]
+        self._desired = set(self._desired_ordered)
+        self.stats["universe_size"] = len(self._desired_ordered)
+        self.stats["mode"] = "wildcard" if self.subscribe_all else "universe"
+        self.stats["subscribed"] = list(self._desired_ordered)
+
+    async def expand_to_plan_limit(self) -> list[str]:
+        """Build and apply the widest universe allowed by the active plan."""
+        from app.infrastructure.external.sahmk_universe import build_ws_universe
+
+        cap = min(self.max_symbols, int(self._limits.get("max_symbols_per_connection") or self.max_symbols))
+        universe = await build_ws_universe(max_symbols=cap)
+        self.set_universe(universe)
+        if self._ws is not None and not self.subscribe_all:
+            await self._resync_subscriptions()
+        return list(self._desired_ordered)
+
     async def subscribe(self, symbols: list[str]) -> None:
         bares = [normalize_symbol(s).bare for s in symbols]
+        cap = min(self.max_symbols, int(self._limits.get("max_symbols_per_connection") or self.max_symbols))
         async with self._lock:
-            self._desired.update(bares)
-            if self._ws is not None:
+            for b in bares:
+                if b not in self._desired:
+                    self._desired_ordered.append(b)
+                    self._desired.add(b)
+            if len(self._desired_ordered) > cap:
+                self._desired_ordered = self._desired_ordered[:cap]
+                self._desired = set(self._desired_ordered)
+            self.stats["universe_size"] = len(self._desired_ordered)
+            self.stats["subscribed"] = list(self._desired_ordered)
+            if self._ws is not None and not self.subscribe_all:
                 await self._send_subscribe(bares)
 
     async def unsubscribe(self, symbols: list[str]) -> None:
         bares = [normalize_symbol(s).bare for s in symbols]
         async with self._lock:
             self._desired.difference_update(bares)
+            self._desired_ordered = [s for s in self._desired_ordered if s not in set(bares)]
+            self.stats["subscribed"] = list(self._desired_ordered)
+            self.stats["universe_size"] = len(self._desired_ordered)
             if self._ws is not None and bares:
                 await self._send({"action": "unsubscribe", "symbols": bares})
 
@@ -226,11 +272,16 @@ class SahmkStockStream:
             self.stats["plan"] = msg.get("plan")
             if isinstance(msg.get("limits"), dict):
                 self._limits.update(msg["limits"])
+                # Clamp desired set to connection limit announced by SAHMK
+                conn_cap = int(self._limits.get("max_symbols_per_connection") or self.max_symbols)
+                if len(self._desired_ordered) > conn_cap:
+                    self.set_universe(self._desired_ordered[:conn_cap])
             self._connected.set()
             logger.info(
-                "SAHMK WS connected plan=%s limits=%s",
+                "SAHMK WS connected plan=%s limits=%s universe=%s",
                 msg.get("plan"),
                 self._limits,
+                len(self._desired),
             )
             if self.on_event:
                 await _maybe_await(self.on_event(msg))
@@ -251,6 +302,16 @@ class SahmkStockStream:
             if msg_type == "error":
                 self.stats["last_error"] = str(msg)
                 logger.error("SAHMK WS error frame: %s", msg)
+                # Auto-fallback when wildcard not entitled (Pro plan)
+                code = msg.get("code")
+                if code == "plan_not_entitled" and self.subscribe_all:
+                    logger.warning(
+                        "Wildcard subscribe not entitled — falling back to max universe (%s)",
+                        self._limits.get("max_symbols_per_connection"),
+                    )
+                    self.subscribe_all = False
+                    self.stats["mode"] = "universe"
+                    await self.expand_to_plan_limit()
             if self.on_event:
                 await _maybe_await(self.on_event(msg))
             return
@@ -265,7 +326,7 @@ class SahmkStockStream:
                 await self._send({"action": "subscribe", "symbols": ["*"]})
                 self.stats["subscribed"] = ["*"]
                 return
-            symbols = sorted(self._desired)
+            symbols = list(self._desired_ordered)
             self.stats["subscribed"] = symbols
             await self._send_subscribe(symbols)
 

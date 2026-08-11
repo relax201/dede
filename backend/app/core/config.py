@@ -40,10 +40,15 @@ class Settings(BaseSettings):
     SAHMK_WS_URL: str = "wss://api.sahmk.sa/ws/v1/stocks/"
     SAHMK_RATE_LIMIT_PER_MINUTE: int = 1000
     SAHMK_TICK_INTERVAL_SECONDS: int = 3
-    # WebSocket: Enterprise may use symbols=["*"]; otherwise seed list
+    # WebSocket: Enterprise may use symbols=["*"]; Pro max 60/connection
     SAHMK_WS_ENABLED: bool = True
-    SAHMK_WS_SUBSCRIBE_ALL: bool = False
-    SAHMK_WS_SEED_SYMBOLS: str = "2222,1120,1180,1010,2010,1211,7010,7020,2280,4030"
+    SAHMK_WS_SUBSCRIBE_ALL: bool = False  # requires Enterprise; Pro → auto-fallback
+    SAHMK_WS_AUTO_UNIVERSE: bool = True  # build widest list up to MAX_SYMBOLS
+    SAHMK_WS_MAX_SYMBOLS: int = 60
+    SAHMK_WS_SEED_SYMBOLS: str = (
+        "2222,1120,1180,1010,1050,1060,1150,2010,1211,2020,"
+        "7010,7020,7030,2082,2280,4001,4002,4030,5110,7203"
+    )
     SAHMK_WS_PING_INTERVAL_SECONDS: float = 20.0
 
     # LSEG — historical + live failover (every 10s)

@@ -39,12 +39,20 @@ async def lifespan(app: FastAPI):
             on_event=handle_sahmk_event,
             ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
         )
+        if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
+            try:
+                universe = await stream.expand_to_plan_limit()
+                logger.info("SAHMK WS auto-universe ready: %s symbols", len(universe))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Auto-universe build failed, using seeds: %s", exc)
+
         sahmk_ws_mod.sahmk_stream = stream
         stream.start()
         logger.info(
-            "SAHMK WebSocket stream starting (subscribe_all=%s, seeds=%s)",
-            settings.SAHMK_WS_SUBSCRIBE_ALL,
-            settings.sahmk_ws_seed_symbols,
+            "SAHMK WebSocket stream starting (mode=%s, universe=%s, subscribe_all=%s)",
+            stream.stats.get("mode"),
+            stream.stats.get("universe_size"),
+            stream.subscribe_all,
         )
     else:
         logger.warning("SAHMK WebSocket disabled or SAHMK_API_KEY missing")
