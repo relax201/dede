@@ -11,18 +11,13 @@ from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api.v1.router import api_router
-from app.core.config import settings
-from app.websockets.live import router as ws_router
-
 logging.basicConfig(
-    level=logging.DEBUG if settings.DEBUG else logging.INFO,
+    level=logging.INFO,
     format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
 )
-# Quiet noisy third-party DEBUG spam (headers/frames) even if DEBUG=true
 logging.getLogger("websockets").setLevel(logging.WARNING)
 logging.getLogger("websockets.client").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -30,53 +25,61 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("tasi.api")
 
 STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
-API_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "ws")
+API_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "ws", "healthz")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Keep startup fast so Railway healthchecks pass; warm SAHMK in background."""
+    """Accept traffic immediately; warm DB/WS after a short delay."""
     import asyncio
 
-    logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
+    from app.core.config import settings
+
+    logger.info(
+        "Starting %s v%s PORT=%s STATIC=%s",
+        settings.APP_NAME,
+        settings.APP_VERSION,
+        os.environ.get("PORT", "?"),
+        STATIC_DIR,
+    )
+    logger.info("Static index present=%s", (STATIC_DIR / "index.html").is_file())
 
     async def _boot_background() -> None:
+        await asyncio.sleep(1.5)
         try:
             from app.infrastructure.db.session import ensure_schema
 
-            await asyncio.wait_for(asyncio.to_thread(ensure_schema), timeout=8.0)
+            await asyncio.wait_for(asyncio.to_thread(ensure_schema), timeout=5.0)
         except Exception as exc:  # noqa: BLE001
             logger.error("Schema bootstrap failed/skipped: %s", exc)
 
         if not (settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY):
             logger.warning("SAHMK WebSocket disabled or SAHMK_API_KEY missing")
             return
+        try:
+            from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
+            from app.infrastructure.external.sahmk_ws import SahmkStockStream
+            from app.infrastructure.messaging.live_bridge import (
+                handle_sahmk_event,
+                handle_sahmk_quote,
+            )
 
-        from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
-        from app.infrastructure.external.sahmk_ws import SahmkStockStream
-        from app.infrastructure.messaging.live_bridge import (
-            handle_sahmk_event,
-            handle_sahmk_quote,
-        )
-
-        stream = SahmkStockStream(
-            on_quote=handle_sahmk_quote,
-            on_event=handle_sahmk_event,
-            ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
-        )
-        sahmk_ws_mod.sahmk_stream = stream
-        stream.start()
-        app.state.sahmk_stream = stream
-        logger.info("SAHMK WebSocket started on seed universe")
-        if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
-            try:
+            stream = SahmkStockStream(
+                on_quote=handle_sahmk_quote,
+                on_event=handle_sahmk_event,
+                ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
+            )
+            sahmk_ws_mod.sahmk_stream = stream
+            stream.start()
+            app.state.sahmk_stream = stream
+            logger.info("SAHMK WebSocket started on seed universe")
+            if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
                 universe = await stream.expand_to_plan_limit()
                 logger.info("SAHMK WS auto-universe ready: %s symbols", len(universe))
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Auto-universe build failed, using seeds: %s", exc)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("SAHMK boot failed (API stays up): %s", exc)
 
     boot_task = asyncio.create_task(_boot_background(), name="tasi-boot")
-    # Yield immediately — uvicorn can serve /api/health during warm-up
     yield
 
     if not boot_task.done():
@@ -87,113 +90,92 @@ async def lifespan(app: FastAPI):
             pass
     stream = getattr(app.state, "sahmk_stream", None)
     if stream is not None:
-        logger.info("Stopping SAHMK WebSocket stream")
-        await stream.stop()
+        try:
+            await stream.stop()
+        except Exception:  # noqa: BLE001
+            pass
     logger.info("Shutting down API")
 
 
-app = FastAPI(
-    title=settings.APP_NAME,
-    version=settings.APP_VERSION,
-    description=(
-        "تاسي فيجن (TASI Vision) — أدوات تحليل لسوق الأسهم السعودي مع نماذج Ensemble وتفسير SHAP. "
-        "لا تشكّل توصية استثمارية شخصية. التوثيق عبر OpenAPI/Swagger."
-    ),
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    lifespan=lifespan,
-)
+def create_app() -> FastAPI:
+    from app.core.config import settings
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=settings.cors_origins or ["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["*"],
-)
-
-app.include_router(api_router, prefix=settings.API_V1_STR)
-app.include_router(ws_router)
-
-
-def _meta_payload() -> dict:
-    return {
-        "success": True,
-        "app": settings.APP_NAME,
-        "brand_ar": settings.BRAND_NAME_AR,
-        "brand_en": settings.BRAND_NAME_EN,
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "ui": "/",
-        "compliance": {
-            "mode": settings.COMPLIANCE_MODE,
-            "cma_preliminary_approval": settings.CMA_PRELIMINARY_APPROVAL,
-            "disclaimer_ar": settings.LEGAL_DISCLAIMER_AR,
-            "audit_retention_years": settings.AUDIT_RETENTION_YEARS,
-        },
-        "coverage": {
-            "basic_target": settings.COVERAGE_BASIC_TARGET,
-            "advanced_target": settings.COVERAGE_ADVANCED_TARGET,
-        },
-        "horizons": settings.forward_horizons,
-        "cloud": {
-            "host": "railway",
-            "primary": settings.AWS_REGION_PRIMARY,
-            "dr": settings.AWS_REGION_DR,
-        },
-        "endpoints": {
-            "stock": f"{settings.API_V1_STR}/stock/{{symbol}}",
-            "recommendation": f"{settings.API_V1_STR}/recommendation/{{symbol}}?horizon=5",
-            "recommendations": f"{settings.API_V1_STR}/recommendations",
-            "auth_register": f"{settings.API_V1_STR}/auth/register",
-            "auth_login": f"{settings.API_V1_STR}/auth/login",
-            "portfolio": f"{settings.API_V1_STR}/portfolio",
-            "portfolio_performance": f"{settings.API_V1_STR}/portfolio/{{id}}/performance",
-            "stream_status": f"{settings.API_V1_STR}/stream/status",
-            "websocket": "/ws/live",
-        },
-    }
-
-
-@app.exception_handler(Exception)
-async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    logger.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
-    return JSONResponse(
-        status_code=500,
-        content={
-            "success": False,
-            "error": "internal_error",
-            "message": "حدث خطأ داخلي في الخادم" if not settings.DEBUG else str(exc),
-        },
+    application = FastAPI(
+        title=settings.APP_NAME,
+        version=settings.APP_VERSION,
+        description=(
+            "تاسي فيجن (TASI Vision) — أدوات تحليل لسوق الأسهم السعودي. "
+            "لا تشكّل توصية استثمارية شخصية."
+        ),
+        docs_url="/docs",
+        redoc_url="/redoc",
+        openapi_url="/openapi.json",
+        lifespan=lifespan,
     )
 
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-@app.get("/api/meta", tags=["root"], summary="بيانات المنصة")
-async def api_meta() -> dict:
-    return _meta_payload()
+    # Ultra-light probes registered before heavy routers
+    @application.get("/healthz", include_in_schema=False)
+    @application.get("/api/health", tags=["health"])
+    async def healthz() -> dict[str, str]:
+        return {"status": "ok", "version": settings.APP_VERSION}
 
+    from app.api.v1.router import api_router
+    from app.websockets.live import router as ws_router
 
-@app.get("/", include_in_schema=False, response_model=None)
-async def root():
-    index = STATIC_DIR / "index.html"
-    if index.is_file():
-        return FileResponse(index)
-    return _meta_payload()
+    application.include_router(api_router, prefix=settings.API_V1_STR)
+    application.include_router(ws_router)
 
+    def _meta_payload() -> dict:
+        return {
+            "success": True,
+            "app": settings.APP_NAME,
+            "brand_ar": settings.BRAND_NAME_AR,
+            "brand_en": settings.BRAND_NAME_EN,
+            "version": settings.APP_VERSION,
+            "docs": "/docs",
+            "ui": "/",
+            "static_index": (STATIC_DIR / "index.html").is_file(),
+        }
 
-if (STATIC_DIR / "assets").is_dir():
-    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+    @application.get("/api/meta", tags=["root"])
+    async def api_meta() -> dict:
+        return _meta_payload()
 
+    @application.get("/", include_in_schema=False, response_model=None)
+    async def root():
+        index = STATIC_DIR / "index.html"
+        if index.is_file():
+            try:
+                return HTMLResponse(index.read_text(encoding="utf-8"))
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Failed reading index.html: %s", exc)
+        return JSONResponse(_meta_payload())
 
-@app.get("/{full_path:path}", include_in_schema=False, response_model=None)
-async def spa_fallback(full_path: str):
-    if full_path.startswith(API_PREFIXES):
+    assets = STATIC_DIR / "assets"
+    if assets.is_dir():
+        application.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    @application.get("/{full_path:path}", include_in_schema=False, response_model=None)
+    async def spa_fallback(full_path: str):
+        if full_path.startswith(API_PREFIXES):
+            raise HTTPException(status_code=404, detail="Not Found")
+        candidate = STATIC_DIR / full_path
+        if candidate.is_file():
+            return FileResponse(candidate)
+        index = STATIC_DIR / "index.html"
+        if index.is_file():
+            return HTMLResponse(index.read_text(encoding="utf-8"))
         raise HTTPException(status_code=404, detail="Not Found")
-    candidate = STATIC_DIR / full_path
-    if candidate.is_file():
-        return FileResponse(candidate)
-    index = STATIC_DIR / "index.html"
-    if index.is_file():
-        return FileResponse(index)
-    raise HTTPException(status_code=404, detail="Not Found")
+
+    return application
+
+
+app = create_app()

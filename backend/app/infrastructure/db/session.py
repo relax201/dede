@@ -12,18 +12,18 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_connect_args: dict = {}
-if settings.DATABASE_URL.startswith("sqlite"):
-    _connect_args = {"check_same_thread": False}
-
 engine = create_engine(
     settings.DATABASE_URL,
     pool_pre_ping=True,
-    connect_args=_connect_args,
+    connect_args=(
+        {"check_same_thread": False}
+        if settings.DATABASE_URL.startswith("sqlite")
+        else {"connect_timeout": 3}
+    ),
     **(
         {}
         if settings.DATABASE_URL.startswith("sqlite")
-        else {"pool_size": 5, "max_overflow": 10, "pool_timeout": 5}
+        else {"pool_size": 3, "max_overflow": 5, "pool_timeout": 3}
     ),
 )
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, class_=Session)

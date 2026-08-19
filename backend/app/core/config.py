@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Brand
     APP_NAME: str = "تاسي فيجن — TASI Vision"
-    APP_VERSION: str = "2.2.2"
+    APP_VERSION: str = "2.2.3"
     BRAND_NAME_AR: str = "تاسي فيجن"
     BRAND_NAME_EN: str = "TASI Vision"
     DEBUG: bool = False
@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     CLICKHOUSE_URL: str = "clickhouse://default:@clickhouse:9000/tasi"
     REDIS_URL: str = "redis://127.0.0.1:6379/0"
 
+    @field_validator("SECRET_KEY", mode="before")
+    @classmethod
+    def normalize_secret_key(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and len(v.strip()) < 32):
+            return "tasi-vision-dev-only-change-me-32chars"
+        return v
+
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, v: object) -> object:
@@ -45,6 +52,13 @@ class Settings(BaseSettings):
             return "sqlite:////tmp/tasi_vision.db"
         if isinstance(v, str) and v.startswith("postgres://"):
             return "postgresql://" + v[len("postgres://") :]
+        return v
+
+    @field_validator("REDIS_URL", mode="before")
+    @classmethod
+    def normalize_redis_url(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "redis://127.0.0.1:6379/0"
         return v
 
     # Primary live: SAHMK (سهمك) — https://www.sahmk.sa/en/developers/docs

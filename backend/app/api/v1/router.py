@@ -19,21 +19,22 @@ api_router.include_router(stream.router)
 api_router.include_router(companies.router)
 
 
-@api_router.get("/health", tags=["health"], summary="فحص الصحة")
-async def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
 @api_router.get("/health/detail", tags=["health"], summary="فحص الصحة التفصيلي")
 async def health_detail() -> dict:
+    import asyncio
+
     redis_ok = False
     try:
-        redis_ok = bool(redis_client.client.ping())
+        redis_ok = await asyncio.wait_for(asyncio.to_thread(redis_client.client.ping), timeout=1.0)
     except Exception:  # noqa: BLE001
         redis_ok = False
+    try:
+        postgres_ok = await asyncio.wait_for(asyncio.to_thread(ping_db), timeout=1.0)
+    except Exception:  # noqa: BLE001
+        postgres_ok = False
     return {
         "status": "ok",
-        "postgres": ping_db(),
-        "redis": redis_ok,
+        "postgres": bool(postgres_ok),
+        "redis": bool(redis_ok),
         "memory_quotes": memory_quotes.stats(),
     }
