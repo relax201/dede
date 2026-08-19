@@ -9,9 +9,28 @@ function url(path: string): string {
 async function getJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url(path), init);
   if (!res.ok) {
-    throw new Error(`API ${path} failed: ${res.status}`);
+    let detail = `API ${path} failed: ${res.status}`;
+    try {
+      const body = await res.json();
+      if (body?.detail) detail = typeof body.detail === "string" ? body.detail : detail;
+    } catch {
+      // ignore
+    }
+    throw new Error(detail);
   }
   return res.json() as Promise<T>;
+}
+
+export async function fetchHealthDetail(): Promise<{
+  status: string;
+  postgres: boolean;
+  redis: boolean;
+}> {
+  try {
+    return await getJson("/api/health/detail");
+  } catch {
+    return { status: "error", postgres: false, redis: false };
+  }
 }
 
 export async function fetchMarketOverview(): Promise<MarketOverview> {
@@ -56,7 +75,7 @@ export async function fetchStock(symbol: string) {
 
 export async function fetchCompanies(query = ""): Promise<Company[]> {
   try {
-    const q = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : "";
+    const q = query.trim() ? `q=${encodeURIComponent(query.trim())}` : "";
     const data = await getJson<{ results: Company[] }>(`/api/companies?${q}`);
     return data.results ?? [];
   } catch {
@@ -67,7 +86,7 @@ export async function fetchCompanies(query = ""): Promise<Company[]> {
 export async function fetchRecommendations(horizon: number = 5): Promise<Recommendation[]> {
   try {
     const data = await getJson<{ results: Recommendation[] }>(
-      `/api/recommendations?horizon=${horizon}&limit=8`
+      `/api/recommendations?horizon=${horizon}&limit=5`
     );
     return (data.results ?? []).map((reco) => ({
       ...reco,
@@ -78,6 +97,23 @@ export async function fetchRecommendations(horizon: number = 5): Promise<Recomme
     }));
   } catch {
     return [];
+  }
+}
+
+export async function fetchRecommendation(symbol: string, horizon = 5): Promise<Recommendation | null> {
+  try {
+    const reco = await getJson<Recommendation & { shap?: Array<{ feature: string; shap_value: number }> }>(
+      `/api/recommendation/${encodeURIComponent(symbol)}?horizon=${horizon}`
+    );
+    return {
+      ...reco,
+      sector: reco.sector ?? "غير محدد",
+      risk_level:
+        reco.risk_level ??
+        (reco.confidence > 0.75 ? "low" : reco.confidence > 0.55 ? "medium" : "high"),
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -97,7 +133,13 @@ export async function loginAccount(email: string, password: string) {
   });
 }
 
-export async function createPortfolio(token: string, name: string, capital: number, symbol: string) {
+export async function createPortfolio(
+  token: string,
+  name: string,
+  capital: number,
+  symbol: string,
+  avgCost: number
+) {
   return getJson("/api/portfolio", {
     method: "POST",
     headers: {
@@ -107,16 +149,28 @@ export async function createPortfolio(token: string, name: string, capital: numb
     body: JSON.stringify({
       name,
       capital,
-      holdings: symbol ? [{ symbol, quantity: 10, avg_cost: 1 }] : [],
+      holdings: symbol
+        ? [{ symbol, quantity: 10, avg_cost: Math.max(avgCost, 0.01) }]
+        : [],
     }),
   });
 }
 
 export async function listPortfolios(token: string) {
-  return getJson<{ results: Array<{ id: string; name: string; capital: number; holdings_count: number }> }>(
-    "/api/portfolio",
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  return getJson<{
+    results: Array<{ id: string; name: string; capital: number; holdings_count: number }>;
+  }>("/api/portfolio", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export async function fetchPortfolioPerformance(token: string, id: string) {
+  return getJson<{
+    return_pct: number;
+    market_value: number;
+    unrealized_pnl: number;
+    holdings: Array<{ symbol: string; last_price: number; unrealized_pnl: number }>;
+  }>(`/api/portfolio/${id}/performance`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
 }
 
 export function liveSocketUrl(): string {

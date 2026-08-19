@@ -237,6 +237,21 @@ body {
   cursor: pointer;
 }
 
+.shap-box {
+  margin-top: 1rem;
+  padding: 0.85rem 0;
+  border-top: 1px solid var(--line);
+  color: #d5e0e8;
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.shap-box ul {
+  margin: 0.4rem 0 0;
+  padding-inline-start: 1.1rem;
+  color: var(--muted);
+}
+
 .dash__grid {
   display: grid;
   grid-template-columns: minmax(0, 1.4fr) minmax(280px, 0.9fr);

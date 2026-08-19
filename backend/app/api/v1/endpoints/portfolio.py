@@ -79,9 +79,10 @@ async def portfolio_performance(
     user: CurrentUser,
     _: None = Depends(rate_limit),
 ) -> PortfolioPerformanceResponse:
-    _ = user  # authorization hook: ensure ownership in production
     service = PortfolioService(db)
     try:
-        return service.performance(portfolio_id)
+        return await service.performance(portfolio_id, user_id=UUID(user["sub"]))
+    except PermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc

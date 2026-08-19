@@ -21,7 +21,13 @@ class RedisClient:
     @property
     def client(self) -> redis.Redis:
         if self._client is None:
-            self._client = redis.Redis.from_url(self._url, decode_responses=True)
+            self._client = redis.Redis.from_url(
+                self._url,
+                decode_responses=True,
+                socket_connect_timeout=1.5,
+                socket_timeout=1.5,
+                retry_on_timeout=False,
+            )
         return self._client
 
     def get_json(self, key: str) -> dict[str, Any] | list[Any] | None:

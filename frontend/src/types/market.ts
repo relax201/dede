@@ -18,6 +18,7 @@ export interface Recommendation {
   entry_price: number;
   stop_loss: number;
   take_profit: number;
+  shap?: Array<{ feature: string; shap_value: number }>;
 }
 
 export interface MarketOverview {

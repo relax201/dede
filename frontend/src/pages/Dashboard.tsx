@@ -6,7 +6,10 @@ import {
   createPortfolio,
   fetchCandles,
   fetchCompanies,
+  fetchHealthDetail,
   fetchMarketOverview,
+  fetchPortfolioPerformance,
+  fetchRecommendation,
   fetchRecommendations,
   fetchStock,
   listPortfolios,
@@ -19,21 +22,6 @@ const RISK_LEVELS = ["الكل", "low", "medium", "high"] as const;
 const HORIZONS = [5, 10, 20] as const;
 const TOKEN_KEY = "tasi.token";
 
-const DEMO_RECOS: Recommendation[] = [
-  {
-    symbol: "2222",
-    name_ar: "أرامكو السعودية",
-    sector: "الطاقة",
-    action: "strong_buy",
-    confidence: 0.84,
-    explanation_ar: "زخم إيجابي مع RSI خارج التشبع وMACD صاعد.",
-    risk_level: "low",
-    entry_price: 28.4,
-    stop_loss: 27.1,
-    take_profit: 31.65,
-  },
-];
-
 const actionLabel: Record<Recommendation["action"], string> = {
   strong_buy: "شراء قوي",
   buy: "شراء",
@@ -43,20 +31,25 @@ const actionLabel: Record<Recommendation["action"], string> = {
 
 export function Dashboard() {
   const [overview, setOverview] = useState<MarketOverview | null>(null);
-  const [recos, setRecos] = useState<Recommendation[]>(DEMO_RECOS);
+  const [recos, setRecos] = useState<Recommendation[]>([]);
+  const [loadingRecos, setLoadingRecos] = useState(true);
   const [companies, setCompanies] = useState<Company[]>([]);
   const [query, setQuery] = useState("");
   const [risk, setRisk] = useState<(typeof RISK_LEVELS)[number]>("الكل");
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(5);
   const [selected, setSelected] = useState("2222");
+  const [detail, setDetail] = useState<Recommendation | null>(null);
   const [candles, setCandles] = useState<Candle[]>([]);
   const [stockName, setStockName] = useState("2222");
+  const [health, setHealth] = useState({ postgres: false, redis: false });
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
   const [authMsg, setAuthMsg] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
-  const [portfolios, setPortfolios] = useState<Array<{ id: string; name: string; capital: number }>>([]);
+  const [portfolios, setPortfolios] = useState<
+    Array<{ id: string; name: string; capital: number; perf?: string }>
+  >([]);
 
   const watchSymbols = useMemo(() => {
     const fromRecos = recos.map((r) => r.symbol);
@@ -66,20 +59,30 @@ export function Dashboard() {
   const { quotes, status: wsStatus } = useLiveQuotes(watchSymbols);
   const live = quotes[selected];
   const sectors = useMemo(() => {
-    const set = new Set(recos.map((r) => r.sector).filter(Boolean));
+    const set = new Set(
+      [...companies.map((c) => c.sector), ...recos.map((r) => r.sector)].filter(
+        (s): s is string => Boolean(s) && s !== "غير محدد"
+      )
+    );
     return ["الكل", ...Array.from(set)];
-  }, [recos]);
+  }, [companies, recos]);
   const [sector, setSector] = useState("الكل");
+
+  useEffect(() => {
+    fetchHealthDetail().then((h) => setHealth({ postgres: h.postgres, redis: h.redis }));
+  }, []);
 
   useEffect(() => {
     let alive = true;
     (async () => {
+      setLoadingRecos(true);
       const mkt = await fetchMarketOverview();
       if (!alive) return;
       setOverview(mkt);
       const liveRecos = await fetchRecommendations(horizon);
       if (!alive) return;
-      if (liveRecos.length) setRecos(liveRecos);
+      setRecos(liveRecos);
+      setLoadingRecos(false);
       const universe = await fetchCompanies();
       if (!alive) return;
       if (universe.length) setCompanies(universe);
@@ -100,16 +103,34 @@ export function Dashboard() {
       } catch {
         if (alive) setStockName(selected);
       }
+      const reco = await fetchRecommendation(selected, horizon);
+      if (alive) setDetail(reco);
     })();
     return () => {
       alive = false;
     };
-  }, [selected]);
+  }, [selected, horizon]);
 
   useEffect(() => {
     if (!token) return;
     listPortfolios(token)
-      .then((data) => setPortfolios(data.results ?? []))
+      .then(async (data) => {
+        const base = data.results ?? [];
+        const withPerf = await Promise.all(
+          base.map(async (p) => {
+            try {
+              const perf = await fetchPortfolioPerformance(token, p.id);
+              return {
+                ...p,
+                perf: `${perf.return_pct.toFixed(2)}% · ${perf.market_value.toFixed(0)} ر.س`,
+              };
+            } catch {
+              return p;
+            }
+          })
+        );
+        setPortfolios(withPerf);
+      })
       .catch(() => setPortfolios([]));
   }, [token]);
 
@@ -146,7 +167,7 @@ export function Dashboard() {
       setToken(res.access_token);
       setAuthMsg("تم الدخول");
     } catch (err) {
-      setAuthMsg(err instanceof Error ? err.message : "تعذر الدخول — اربط Postgres في Railway");
+      setAuthMsg(err instanceof Error ? err.message : "تعذر الدخول");
     }
   }
 
@@ -156,7 +177,8 @@ export function Dashboard() {
       return;
     }
     try {
-      await createPortfolio(token, `محفظة ${selected}`, 10000, selected);
+      const avg = live?.price ?? detail?.entry_price ?? 1;
+      await createPortfolio(token, `محفظة ${selected}`, 10000, selected, avg);
       const data = await listPortfolios(token);
       setPortfolios(data.results ?? []);
       setAuthMsg("تم إنشاء المحفظة");
@@ -173,8 +195,11 @@ export function Dashboard() {
           <h1 className="dash__logo">تاسي فيجن</h1>
           <p className="dash__logo-en">TASI Vision</p>
           <p className="dash__tag">
-            بث سهمك الحي · أفق {horizon} أيام · حالة الاتصال:{" "}
+            بث سهمك · أفق {horizon} أيام · WS:{" "}
             {wsStatus === "open" ? "متصل" : wsStatus === "connecting" ? "يتصل…" : "منقطع"}
+            {" · "}
+            DB: {health.postgres ? "جاهز" : "محلي/غير مربوط"} · Redis:{" "}
+            {health.redis ? "جاهز" : "غير مربوط"}
           </p>
         </div>
         <div className="dash__pulse" aria-hidden />
@@ -280,6 +305,25 @@ export function Dashboard() {
           ) : (
             <p className="empty">لا تتوفر شموع حالياً لهذا الرمز</p>
           )}
+          {detail && (
+            <div className="shap-box">
+              <p>
+                <strong>{actionLabel[detail.action]}</strong> · ثقة{" "}
+                {(detail.confidence * 100).toFixed(0)}% · وقف {detail.stop_loss} · هدف{" "}
+                {detail.take_profit}
+              </p>
+              <p>{detail.explanation_ar}</p>
+              {!!detail.shap?.length && (
+                <ul>
+                  {detail.shap.slice(0, 4).map((s) => (
+                    <li key={s.feature}>
+                      {s.feature}: {s.shap_value}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </section>
 
         <section className="dash__reco-panel" aria-label="قائمة التحليلات">
@@ -316,7 +360,10 @@ export function Dashboard() {
                 </li>
               );
             })}
-            {!filtered.length && <li className="empty">لا توجد نتائج مطابقة للفلتر</li>}
+            {loadingRecos && <li className="empty">جاري حساب التحليلات…</li>}
+            {!loadingRecos && !filtered.length && (
+              <li className="empty">لا توجد نتائج مطابقة للفلتر</li>
+            )}
           </ul>
         </section>
       </div>
@@ -324,7 +371,11 @@ export function Dashboard() {
       <section className="account-panel" aria-label="الحساب والمحفظة">
         <div className="panel-head">
           <h2>الحساب والمحفظة</h2>
-          <p>يتطلب PostgreSQL في Railway لتسجيل الدخول</p>
+          <p>
+            {health.postgres
+              ? "قاعدة البيانات جاهزة"
+              : "يعمل على تخزين محلي داخل الخدمة — اربط Postgres في Railway للثبات"}
+          </p>
         </div>
         {!token ? (
           <form className="auth-form" onSubmit={(e) => onAuth("login", e)}>
@@ -374,6 +425,7 @@ export function Dashboard() {
               {portfolios.map((p) => (
                 <li key={p.id}>
                   {p.name} · {p.capital} ر.س
+                  {p.perf ? ` · ${p.perf}` : ""}
                 </li>
               ))}
             </ul>

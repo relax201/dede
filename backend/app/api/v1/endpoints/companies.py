@@ -14,16 +14,17 @@ router = APIRouter(tags=["companies"])
 
 @router.get("/companies", summary="قائمة شركات تاسي (من الكاش/المزامنة)")
 async def list_companies(
+    db: DbSession,
     sector: str | None = Query(default=None),
     q: str | None = Query(default=None, description="بحث بالرمز أو الاسم"),
     _: None = Depends(rate_limit),
 ) -> dict:
-    service = CompanySyncService(db=None)
+    service = CompanySyncService(db=db)
     rows = service.list_cached()
     if not rows:
-        # lazy sync if cache empty
+        # lazy sync if cache empty — also upsert into Postgres/SQLite when available
         try:
-            synced = await CompanySyncService(db=None).sync_tasi(enrich_sectors=False)
+            synced = await CompanySyncService(db=db).sync_tasi(enrich_sectors=True, enrich_limit=40)
             rows = service.list_cached() or list(synced.get("companies") or synced.get("sample") or [])
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(

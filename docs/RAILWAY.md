@@ -17,10 +17,9 @@ curl -s https://dede-production-c796.up.railway.app/api/health/detail
 curl -s https://dede-production-c796.up.railway.app/api/stream/status
 ```
 
-إذا ظهر `"postgres": false` أو `"redis": false` في `/api/health/detail`، اربط المتغيرات:
-
-- `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
-- `REDIS_URL` = `${{Redis.REDIS_URL}}` أو `${{Redis.REDIS_PRIVATE_URL}}`
+إذا ظهر `"postgres": false` أو `"redis": false` في `/api/health/detail`:
+- للتثبيت الدائم: اربط `DATABASE_URL=${{Postgres.DATABASE_URL}}` و `REDIS_URL=${{Redis.REDIS_URL}}`
+- بدون Postgres يعمل التطبيق على SQLite داخل الحاوية (للتجربة) ويقدّم الواجهة من نفس الرابط
 
 ## الطريقة أ — من لوحة Railway (موصى بها)
 

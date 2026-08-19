@@ -20,18 +20,17 @@ router = APIRouter(tags=["recommendations"])
 async def list_recommendations(
     db: DbSession,
     horizon: int = Query(default=5),
-    limit: int = Query(default=8, ge=1, le=20),
+    limit: int = Query(default=5, ge=1, le=12),
     _: None = Depends(rate_limit),
 ) -> dict:
     if horizon not in (5, 10, 20):
         raise HTTPException(status_code=400, detail="الأفق المسموح: 5, 10, 20")
     stream = get_sahmk_stream()
-    symbols = list(settings.sahmk_ws_seed_symbols)
+    symbols = list(settings.sahmk_ws_seed_symbols)[:limit]
     if stream is not None:
         live = list(getattr(stream, "_desired_ordered", []) or [])
         if live:
-            symbols = live
-    symbols = symbols[:limit]
+            symbols = live[:limit]
     service = RecommendationService(db)
     rows = await service.list_live(symbols, horizon_days=horizon)
     return {"count": len(rows), "horizon": horizon, "results": rows}

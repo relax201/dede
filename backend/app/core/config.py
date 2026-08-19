@@ -14,15 +14,18 @@ class Settings(BaseSettings):
 
     # Brand
     APP_NAME: str = "تاسي فيجن — TASI Vision"
-    APP_VERSION: str = "2.1.0"
+    APP_VERSION: str = "2.2.0"
     BRAND_NAME_AR: str = "تاسي فيجن"
     BRAND_NAME_EN: str = "TASI Vision"
     DEBUG: bool = False
     API_V1_STR: str = "/api"
     TIMEZONE: str = "Asia/Riyadh"
 
-    # Security
-    SECRET_KEY: str = Field(..., min_length=32)
+    # Security — override in Railway Variables (do not keep the default in production)
+    SECRET_KEY: str = Field(
+        default="tasi-vision-dev-only-change-me-32chars",
+        min_length=32,
+    )
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     RATE_LIMIT_PER_MINUTE: int = 100
@@ -30,13 +33,16 @@ class Settings(BaseSettings):
     AUDIT_RETENTION_YEARS: int = 5  # CMA / حوكمة: 5 سنوات وليس 90 يوماً
 
     # Databases (Railway injects postgres:// — normalize for SQLAlchemy)
-    DATABASE_URL: str
+    # SQLite fallback keeps the API usable before Postgres is linked.
+    DATABASE_URL: str = "sqlite:////tmp/tasi_vision.db"
     CLICKHOUSE_URL: str = "clickhouse://default:@clickhouse:9000/tasi"
-    REDIS_URL: str = "redis://redis:6379/0"
+    REDIS_URL: str = "redis://127.0.0.1:6379/0"
 
     @field_validator("DATABASE_URL", mode="before")
     @classmethod
     def normalize_database_url(cls, v: object) -> object:
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "sqlite:////tmp/tasi_vision.db"
         if isinstance(v, str) and v.startswith("postgres://"):
             return "postgresql://" + v[len("postgres://") :]
         return v
