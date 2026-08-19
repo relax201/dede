@@ -28,7 +28,7 @@ async def health_detail() -> dict:
 
     redis_ok = False
     try:
-        redis_ok = await asyncio.wait_for(asyncio.to_thread(redis_client.client.ping), timeout=1.0)
+        redis_ok = await asyncio.wait_for(asyncio.to_thread(redis_client.ping), timeout=0.5)
     except Exception:  # noqa: BLE001
         redis_ok = False
     try:

@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from app.domain.symbols import normalize_symbol
+from app.infrastructure.cache.memory_cache import memory_cache
 from app.infrastructure.cache.redis_client import redis_client
 from app.infrastructure.external.sahmk_client import SahmkClient
 
@@ -21,6 +22,18 @@ def _level(row: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _cache_get(key: str) -> Any | None:
+    hit = memory_cache.get(key)
+    if hit is not None:
+        return hit
+    return redis_client.get_json(key)
+
+
+def _cache_set(key: str, value: Any, ttl_seconds: int) -> None:
+    memory_cache.set(key, value, ttl_seconds=ttl_seconds)
+    redis_client.set_json(key, value, ttl_seconds=ttl_seconds)
+
+
 class MarketBookService:
     def __init__(self, client: SahmkClient | None = None) -> None:
         self.client = client or SahmkClient()
@@ -29,7 +42,7 @@ class MarketBookService:
         forms = normalize_symbol(symbol)
         levels = max(1, min(int(levels), 20))
         cache_key = f"depth:{forms.bare}:{levels}"
-        cached = redis_client.get_json(cache_key)
+        cached = _cache_get(cache_key)
         if isinstance(cached, dict) and cached.get("bids") is not None:
             return cached
 
@@ -54,15 +67,14 @@ class MarketBookService:
             "bids": bids,
             "asks": asks,
         }
-        # Short TTL — book moves quickly during session
-        redis_client.set_json(cache_key, result, ttl_seconds=3)
+        _cache_set(cache_key, result, ttl_seconds=3)
         return result
 
     async def get_trades(self, symbol: str, limit: int = 50) -> dict[str, Any]:
         forms = normalize_symbol(symbol)
         limit = max(1, min(int(limit), 200))
         cache_key = f"trades:{forms.bare}:{limit}"
-        cached = redis_client.get_json(cache_key)
+        cached = _cache_get(cache_key)
         if isinstance(cached, dict) and cached.get("events") is not None:
             return cached
 
@@ -95,5 +107,5 @@ class MarketBookService:
             },
             "events": events,
         }
-        redis_client.set_json(cache_key, result, ttl_seconds=2)
+        _cache_set(cache_key, result, ttl_seconds=2)
         return result

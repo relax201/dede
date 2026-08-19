@@ -42,7 +42,9 @@ async def test_get_depth_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
             stored[key] = value
 
     import app.domain.services.market_book_service as mod
+    from app.infrastructure.cache.memory_cache import memory_cache
 
+    memory_cache.clear()
     monkeypatch.setattr(mod, "redis_client", DummyRedis())
 
     service = MarketBookService(client=client)
@@ -89,7 +91,9 @@ async def test_get_trades_normalized(monkeypatch: pytest.MonkeyPatch) -> None:
             stored[key] = value
 
     import app.domain.services.market_book_service as mod
+    from app.infrastructure.cache.memory_cache import memory_cache
 
+    memory_cache.clear()
     monkeypatch.setattr(mod, "redis_client", DummyRedis())
 
     service = MarketBookService(client=client)

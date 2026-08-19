@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Brand
     APP_NAME: str = "تاسي فيجن — TASI Vision"
-    APP_VERSION: str = "2.4.0"
+    APP_VERSION: str = "2.4.1"
     BRAND_NAME_AR: str = "تاسي فيجن"
     BRAND_NAME_EN: str = "TASI Vision"
     DEBUG: bool = False
@@ -65,7 +65,11 @@ class Settings(BaseSettings):
     def normalize_redis_url(cls, v: object) -> object:
         if v is None or (isinstance(v, str) and not v.strip()):
             return "redis://127.0.0.1:6379/0"
-        return v
+        url = str(v).strip()
+        # Broken Railway leftover pointing at unreachable local Redis
+        if any(h in url for h in ("://localhost", "://127.0.0.1", "://::1", "://0.0.0.0")):
+            return "redis://127.0.0.1:6379/0"
+        return url
 
     # Primary live: SAHMK (سهمك) — https://www.sahmk.sa/en/developers/docs
     SAHMK_API_KEY: str = ""

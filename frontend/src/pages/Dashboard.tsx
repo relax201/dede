@@ -137,24 +137,41 @@ export function Dashboard() {
   useEffect(() => {
     let alive = true;
     let timer: number | undefined;
+    let inFlight = false;
+    let failStreak = 0;
 
-    const loadBook = async () => {
-      setBookLoading(true);
-      const [d, t] = await Promise.all([fetchDepth(selected, 10), fetchTrades(selected, 40)]);
-      if (!alive) return;
-      setDepth(d);
-      setTape(t);
-      setBookLoading(false);
+    const loadBook = async (initial = false) => {
+      if (inFlight) return;
+      inFlight = true;
+      if (initial) setBookLoading(true);
+      try {
+        const [d, t] = await Promise.all([fetchDepth(selected, 10), fetchTrades(selected, 40)]);
+        if (!alive) return;
+        if (d) setDepth(d);
+        if (t) setTape(t);
+        failStreak = d || t ? 0 : failStreak + 1;
+      } catch {
+        failStreak += 1;
+      } finally {
+        inFlight = false;
+        if (alive) setBookLoading(false);
+      }
     };
 
-    void loadBook();
-    timer = window.setInterval(() => {
-      void loadBook();
-    }, 4000);
+    void loadBook(true);
+    const tick = () => {
+      // Back off when SAHMK/depth is down so we don't hammer a recovering server
+      const delay = failStreak >= 3 ? 15000 : 8000;
+      timer = window.setTimeout(async () => {
+        await loadBook(false);
+        if (alive) tick();
+      }, delay);
+    };
+    tick();
 
     return () => {
       alive = false;
-      if (timer) window.clearInterval(timer);
+      if (timer) window.clearTimeout(timer);
     };
   }, [selected]);
 
