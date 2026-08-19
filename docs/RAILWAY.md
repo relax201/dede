@@ -49,7 +49,7 @@ curl -s https://dede-production-c796.up.railway.app/api/stream/status
 | `SAHMK_WS_MAX_SYMBOLS` | `60` |
 | `ALLOWED_ORIGINS` | `https://<web-domain>` |
 | `RAILWAY_STATIC_URL` | `https://<web-domain>` |
-| `DEBUG` | `false` |
+| `DEBUG` | `false` ← مهم: لا تضع `true` في الإنتاج (يُظهر سجلات WebSocket كأنها أخطاء) |
 | `ENVIRONMENT` | `production` |
 | `API_V1_STR` | `/api` |
 | `TIMEZONE` | `Asia/Riyadh` |
