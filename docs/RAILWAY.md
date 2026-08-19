@@ -5,7 +5,7 @@
 ## الطريقة أ — من لوحة Railway (موصى بها)
 
 1. افتح [railway.app/new](https://railway.app/new) → **Deploy from GitHub repo**  
-   اختر `realx2030/TASI2050` والفرع `cursor/tasi-ai-platform-blueprint-9345` (أو `main` بعد الدمج).
+   اختر **`relax201/dede`** والفرع `main` (مستودع النشر المرتبط).
 2. أضف قواعد البيانات:
    - **New → Database → PostgreSQL**
    - **New → Database → Redis**
