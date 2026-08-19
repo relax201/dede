@@ -1,5 +1,12 @@
 export type RecAction = "strong_buy" | "buy" | "hold" | "sell";
 
+export interface Company {
+  symbol: string;
+  name_ar?: string;
+  name_en?: string;
+  sector?: string;
+}
+
 export interface Recommendation {
   symbol: string;
   name_ar?: string;

@@ -1,13 +1,23 @@
-import { useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 import { LegalDisclaimer } from "../components/LegalDisclaimer";
 import { PriceChart } from "../components/PriceChart";
 import { useLiveQuotes } from "../hooks/useLiveQuotes";
-import { fetchCandles, fetchMarketOverview, fetchRecommendations } from "../services/api";
-import type { Candle, MarketOverview, Recommendation } from "../types/market";
+import {
+  createPortfolio,
+  fetchCandles,
+  fetchCompanies,
+  fetchMarketOverview,
+  fetchRecommendations,
+  fetchStock,
+  listPortfolios,
+  loginAccount,
+  registerAccount,
+} from "../services/api";
+import type { Candle, Company, MarketOverview, Recommendation } from "../types/market";
 
-const SECTORS = ["الكل", "الطاقة", "البنوك", "المواد الأساسية", "الاتصالات", "الرعاية الصحية"];
 const RISK_LEVELS = ["الكل", "low", "medium", "high"] as const;
 const HORIZONS = [5, 10, 20] as const;
+const TOKEN_KEY = "tasi.token";
 
 const DEMO_RECOS: Recommendation[] = [
   {
@@ -22,42 +32,6 @@ const DEMO_RECOS: Recommendation[] = [
     stop_loss: 27.1,
     take_profit: 31.65,
   },
-  {
-    symbol: "1120",
-    name_ar: "مصرف الراجحي",
-    sector: "البنوك",
-    action: "buy",
-    confidence: 0.71,
-    explanation_ar: "السعر فوق المتوسطات مع تقلب منخفض نسبياً.",
-    risk_level: "medium",
-    entry_price: 86.2,
-    stop_loss: 83.0,
-    take_profit: 94.2,
-  },
-  {
-    symbol: "2010",
-    name_ar: "سابك",
-    sector: "المواد الأساسية",
-    action: "hold",
-    confidence: 0.52,
-    explanation_ar: "إشارات متضاربة بين الزخم والمشاعر الإخبارية.",
-    risk_level: "medium",
-    entry_price: 72.5,
-    stop_loss: 69.8,
-    take_profit: 79.25,
-  },
-  {
-    symbol: "1180",
-    name_ar: "الأهلي السعودي",
-    sector: "البنوك",
-    action: "sell",
-    confidence: 0.34,
-    explanation_ar: "ضعف الزخم وارتفاع التقلب قصير الأجل.",
-    risk_level: "high",
-    entry_price: 38.1,
-    stop_loss: 39.6,
-    take_profit: 34.35,
-  },
 ];
 
 const actionLabel: Record<Recommendation["action"], string> = {
@@ -70,11 +44,19 @@ const actionLabel: Record<Recommendation["action"], string> = {
 export function Dashboard() {
   const [overview, setOverview] = useState<MarketOverview | null>(null);
   const [recos, setRecos] = useState<Recommendation[]>(DEMO_RECOS);
-  const [sector, setSector] = useState("الكل");
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [query, setQuery] = useState("");
   const [risk, setRisk] = useState<(typeof RISK_LEVELS)[number]>("الكل");
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(5);
   const [selected, setSelected] = useState("2222");
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [stockName, setStockName] = useState("2222");
+  const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
+  const [authMsg, setAuthMsg] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [portfolios, setPortfolios] = useState<Array<{ id: string; name: string; capital: number }>>([]);
 
   const watchSymbols = useMemo(() => {
     const fromRecos = recos.map((r) => r.symbol);
@@ -83,6 +65,11 @@ export function Dashboard() {
 
   const { quotes, status: wsStatus } = useLiveQuotes(watchSymbols);
   const live = quotes[selected];
+  const sectors = useMemo(() => {
+    const set = new Set(recos.map((r) => r.sector).filter(Boolean));
+    return ["الكل", ...Array.from(set)];
+  }, [recos]);
+  const [sector, setSector] = useState("الكل");
 
   useEffect(() => {
     let alive = true;
@@ -93,6 +80,9 @@ export function Dashboard() {
       const liveRecos = await fetchRecommendations(horizon);
       if (!alive) return;
       if (liveRecos.length) setRecos(liveRecos);
+      const universe = await fetchCompanies();
+      if (!alive) return;
+      if (universe.length) setCompanies(universe);
     })();
     return () => {
       alive = false;
@@ -103,13 +93,25 @@ export function Dashboard() {
     let alive = true;
     (async () => {
       const bars = await fetchCandles(selected, 120);
-      if (!alive) return;
-      setCandles(bars);
+      if (alive) setCandles(bars);
+      try {
+        const quote = await fetchStock(selected);
+        if (alive) setStockName(quote.name_ar || quote.symbol);
+      } catch {
+        if (alive) setStockName(selected);
+      }
     })();
     return () => {
       alive = false;
     };
   }, [selected]);
+
+  useEffect(() => {
+    if (!token) return;
+    listPortfolios(token)
+      .then((data) => setPortfolios(data.results ?? []))
+      .catch(() => setPortfolios([]));
+  }, [token]);
 
   const filtered = useMemo(() => {
     return recos
@@ -117,6 +119,51 @@ export function Dashboard() {
       .filter((r) => (risk === "الكل" ? true : r.risk_level === risk))
       .sort((a, b) => b.confidence - a.confidence);
   }, [recos, sector, risk]);
+
+  const companyHits = useMemo(() => {
+    const q = query.trim();
+    if (!q) return companies.slice(0, 12);
+    const qq = q.toLowerCase();
+    return companies
+      .filter(
+        (c) =>
+          c.symbol.includes(q) ||
+          (c.name_ar ?? "").includes(q) ||
+          (c.name_en ?? "").toLowerCase().includes(qq)
+      )
+      .slice(0, 12);
+  }, [companies, query]);
+
+  async function onAuth(mode: "login" | "register", ev: FormEvent) {
+    ev.preventDefault();
+    setAuthMsg("");
+    try {
+      const res =
+        mode === "login"
+          ? await loginAccount(email, password)
+          : await registerAccount(email, password, fullName);
+      localStorage.setItem(TOKEN_KEY, res.access_token);
+      setToken(res.access_token);
+      setAuthMsg("تم الدخول");
+    } catch (err) {
+      setAuthMsg(err instanceof Error ? err.message : "تعذر الدخول — اربط Postgres في Railway");
+    }
+  }
+
+  async function onCreatePortfolio() {
+    if (!token) {
+      setAuthMsg("سجّل الدخول أولاً");
+      return;
+    }
+    try {
+      await createPortfolio(token, `محفظة ${selected}`, 10000, selected);
+      const data = await listPortfolios(token);
+      setPortfolios(data.results ?? []);
+      setAuthMsg("تم إنشاء المحفظة");
+    } catch (err) {
+      setAuthMsg(err instanceof Error ? err.message : "تعذر إنشاء المحفظة");
+    }
+  }
 
   return (
     <div className="dash">
@@ -153,7 +200,7 @@ export function Dashboard() {
           <strong>{overview?.decliners ?? "—"}</strong>
         </div>
         <div className="metric">
-          <span>السهم المحدد</span>
+          <span>{stockName}</span>
           <strong>{live?.price?.toFixed(2) ?? "—"}</strong>
           <em className={(live?.change_pct ?? 0) >= 0 ? "up" : "down"}>
             {live?.change_pct != null
@@ -163,11 +210,19 @@ export function Dashboard() {
         </div>
       </section>
 
-      <section className="dash__filters" aria-label="تصفية التوصيات">
+      <section className="dash__filters" aria-label="بحث وتصفية">
+        <label>
+          بحث عن شركة
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="رمز أو اسم — مثال 2222"
+          />
+        </label>
         <label>
           القطاع
           <select value={sector} onChange={(e) => setSector(e.target.value)}>
-            {SECTORS.map((s) => (
+            {sectors.map((s) => (
               <option key={s} value={s}>
                 {s}
               </option>
@@ -196,6 +251,18 @@ export function Dashboard() {
         </label>
       </section>
 
+      {!!companyHits.length && (
+        <ul className="company-chips" aria-label="نتائج البحث">
+          {companyHits.map((c) => (
+            <li key={c.symbol}>
+              <button type="button" onClick={() => setSelected(c.symbol)}>
+                {c.symbol} · {c.name_ar ?? c.name_en}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div className="dash__grid">
         <section className="dash__chart-panel" aria-label="الرسم البياني">
           <div className="panel-head">
@@ -204,11 +271,8 @@ export function Dashboard() {
               {live?.price != null ? ` · ${live.price.toFixed(2)}` : ""}
             </h2>
             <p>
-              شموع سهمك التاريخية
+              {stockName} · شموع سهمك
               {candles.length ? ` (${candles.length})` : " — جاري التحميل"}
-              {live?.bid != null && live?.ask != null
-                ? ` · عرض ${live.bid} / طلب ${live.ask}`
-                : ""}
             </p>
           </div>
           {candles.length ? (
@@ -218,10 +282,10 @@ export function Dashboard() {
           )}
         </section>
 
-        <section className="dash__reco-panel" aria-label="قائمة التوصيات">
+        <section className="dash__reco-panel" aria-label="قائمة التحليلات">
           <div className="panel-head">
             <h2>التحليلات</h2>
-            <p>مرتبة حسب الثقة · أفق {horizon} أيام</p>
+            <p>إشارات فنية من الشموع الحية · أفق {horizon} أيام</p>
           </div>
           <ul className="reco-list">
             {filtered.map((r) => {
@@ -256,6 +320,67 @@ export function Dashboard() {
           </ul>
         </section>
       </div>
+
+      <section className="account-panel" aria-label="الحساب والمحفظة">
+        <div className="panel-head">
+          <h2>الحساب والمحفظة</h2>
+          <p>يتطلب PostgreSQL في Railway لتسجيل الدخول</p>
+        </div>
+        {!token ? (
+          <form className="auth-form" onSubmit={(e) => onAuth("login", e)}>
+            <input
+              type="email"
+              required
+              placeholder="البريد"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              placeholder="الاسم (للتسجيل)"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+            <input
+              type="password"
+              required
+              minLength={8}
+              placeholder="كلمة المرور ≥ 8"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <div className="auth-actions">
+              <button type="submit">دخول</button>
+              <button type="button" onClick={(e) => onAuth("register", e)}>
+                إنشاء حساب
+              </button>
+            </div>
+          </form>
+        ) : (
+          <div className="auth-form">
+            <p>مسجّل الدخول</p>
+            <button type="button" onClick={onCreatePortfolio}>
+              إنشاء محفظة بالسهم المحدد
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                localStorage.removeItem(TOKEN_KEY);
+                setToken("");
+              }}
+            >
+              خروج
+            </button>
+            <ul>
+              {portfolios.map((p) => (
+                <li key={p.id}>
+                  {p.name} · {p.capital} ر.س
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {authMsg && <p className="empty">{authMsg}</p>}
+      </section>
     </div>
   );
 }

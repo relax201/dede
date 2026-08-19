@@ -14,7 +14,7 @@ from app.infrastructure.external.sahmk_client import SahmkClient
 
 logger = logging.getLogger(__name__)
 
-DATA_DIR = Path(__file__).resolve().parents[4] / "data" / "ohlcv"
+DATA_DIR = Path("/tmp/tasi_ohlcv")
 
 
 class HistoricalService:

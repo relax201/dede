@@ -5,9 +5,11 @@ from __future__ import annotations
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
 
 from app.api.deps import CurrentUser, DbSession, rate_limit
 from app.domain.services.portfolio_service import PortfolioService
+from app.infrastructure.db.models import Portfolio
 from app.schemas.stock import (
     ErrorResponse,
     PortfolioCreate,
@@ -16,6 +18,28 @@ from app.schemas.stock import (
 )
 
 router = APIRouter(tags=["portfolios"])
+
+
+@router.get("/portfolio", summary="محافظ المستخدم")
+async def list_portfolios(
+    db: DbSession,
+    user: CurrentUser,
+    _: None = Depends(rate_limit),
+) -> dict:
+    rows = db.scalars(select(Portfolio).where(Portfolio.user_id == UUID(user["sub"]))).all()
+    return {
+        "count": len(rows),
+        "results": [
+            {
+                "id": str(p.id),
+                "name": p.name,
+                "capital": float(p.capital),
+                "currency": p.currency,
+                "holdings_count": len(p.holdings),
+            }
+            for p in rows
+        ],
+    }
 
 
 @router.post(

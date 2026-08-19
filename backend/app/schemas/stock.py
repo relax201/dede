@@ -59,6 +59,9 @@ class RecommendationResponse(BaseModel):
     model_version: str
     generated_at: datetime
     disclaimer_ar: str | None = None
+    risk_level: Literal["low", "medium", "high"] | None = None
+    name_ar: str | None = None
+    sector: str | None = None
 
 
 class HoldingCreate(BaseModel):

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import companies, market, portfolio, recommendation, stock, stream
+from app.api.v1.endpoints import auth, companies, market, portfolio, recommendation, stock, stream
 from app.infrastructure.cache import memory_quotes
 from app.infrastructure.cache.redis_client import redis_client
 from app.infrastructure.db.session import ping_db
 
 api_router = APIRouter()
+api_router.include_router(auth.router)
 api_router.include_router(stock.router)
 api_router.include_router(recommendation.router)
 api_router.include_router(portfolio.router)

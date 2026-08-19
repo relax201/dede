@@ -1,5 +1,16 @@
-# Railway API service — FastAPI (تاسي فيجن)
+# Railway unified service — FastAPI + React SPA
 # Build context: repository root
+FROM node:20-alpine AS web
+
+WORKDIR /web
+COPY frontend/package.json ./
+RUN npm install
+COPY frontend/ ./
+# Same-origin: empty base so the browser calls /api and /ws on this host
+ENV VITE_API_URL="" \
+    VITE_WS_URL=""
+RUN npx vite build
+
 FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -18,7 +29,8 @@ FROM python:3.11-slim AS runtime
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PYTHONPATH=/app:/workspace \
-    PORT=8000
+    PORT=8000 \
+    STATIC_DIR=/app/static
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 curl \
@@ -31,11 +43,12 @@ RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
 
 COPY backend/app ./app
 COPY ml /workspace/ml
+COPY --from=web /web/dist /app/static
+RUN chown -R appuser:appuser /app /workspace
 
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -f "http://127.0.0.1:${PORT:-8000}/api/health" || exit 1
 
-# Railway injects PORT
 CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

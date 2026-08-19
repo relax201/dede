@@ -5,11 +5,14 @@ FastAPI entrypoint — تاسي فيجن (TASI Vision)
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -25,6 +28,9 @@ logging.getLogger("websockets.client").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("tasi.api")
+
+STATIC_DIR = Path(os.environ.get("STATIC_DIR", "/app/static"))
+API_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "ws")
 
 
 @asynccontextmanager
@@ -92,7 +98,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins,
+    allow_origins=settings.cors_origins or ["*"],
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
@@ -100,6 +106,45 @@ app.add_middleware(
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
 app.include_router(ws_router)
+
+
+def _meta_payload() -> dict:
+    return {
+        "success": True,
+        "app": settings.APP_NAME,
+        "brand_ar": settings.BRAND_NAME_AR,
+        "brand_en": settings.BRAND_NAME_EN,
+        "version": settings.APP_VERSION,
+        "docs": "/docs",
+        "ui": "/",
+        "compliance": {
+            "mode": settings.COMPLIANCE_MODE,
+            "cma_preliminary_approval": settings.CMA_PRELIMINARY_APPROVAL,
+            "disclaimer_ar": settings.LEGAL_DISCLAIMER_AR,
+            "audit_retention_years": settings.AUDIT_RETENTION_YEARS,
+        },
+        "coverage": {
+            "basic_target": settings.COVERAGE_BASIC_TARGET,
+            "advanced_target": settings.COVERAGE_ADVANCED_TARGET,
+        },
+        "horizons": settings.forward_horizons,
+        "cloud": {
+            "host": "railway",
+            "primary": settings.AWS_REGION_PRIMARY,
+            "dr": settings.AWS_REGION_DR,
+        },
+        "endpoints": {
+            "stock": f"{settings.API_V1_STR}/stock/{{symbol}}",
+            "recommendation": f"{settings.API_V1_STR}/recommendation/{{symbol}}?horizon=5",
+            "recommendations": f"{settings.API_V1_STR}/recommendations",
+            "auth_register": f"{settings.API_V1_STR}/auth/register",
+            "auth_login": f"{settings.API_V1_STR}/auth/login",
+            "portfolio": f"{settings.API_V1_STR}/portfolio",
+            "portfolio_performance": f"{settings.API_V1_STR}/portfolio/{{id}}/performance",
+            "stream_status": f"{settings.API_V1_STR}/stream/status",
+            "websocket": "/ws/live",
+        },
+    }
 
 
 @app.exception_handler(Exception)
@@ -115,36 +160,31 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-@app.get("/", tags=["root"])
-async def root() -> dict:
-    return {
-        "success": True,
-        "app": settings.APP_NAME,
-        "brand_ar": settings.BRAND_NAME_AR,
-        "brand_en": settings.BRAND_NAME_EN,
-        "version": settings.APP_VERSION,
-        "docs": "/docs",
-        "compliance": {
-            "mode": settings.COMPLIANCE_MODE,
-            "cma_preliminary_approval": settings.CMA_PRELIMINARY_APPROVAL,
-            "disclaimer_ar": settings.LEGAL_DISCLAIMER_AR,
-            "audit_retention_years": settings.AUDIT_RETENTION_YEARS,
-        },
-        "coverage": {
-            "basic_target": settings.COVERAGE_BASIC_TARGET,
-            "advanced_target": settings.COVERAGE_ADVANCED_TARGET,
-        },
-        "horizons": settings.forward_horizons,
-        "cloud": {
-            "primary": settings.AWS_REGION_PRIMARY,
-            "dr": settings.AWS_REGION_DR,
-        },
-        "endpoints": {
-            "stock": f"{settings.API_V1_STR}/stock/{{symbol}}",
-            "recommendation": f"{settings.API_V1_STR}/recommendation/{{symbol}}?horizon=5",
-            "portfolio": f"{settings.API_V1_STR}/portfolio",
-            "portfolio_performance": f"{settings.API_V1_STR}/portfolio/{{id}}/performance",
-            "stream_status": f"{settings.API_V1_STR}/stream/status",
-            "websocket": "/ws/live",
-        },
-    }
+@app.get("/api/meta", tags=["root"], summary="بيانات المنصة")
+async def api_meta() -> dict:
+    return _meta_payload()
+
+
+@app.get("/", include_in_schema=False)
+async def root() -> FileResponse | dict:
+    index = STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    return _meta_payload()
+
+
+if (STATIC_DIR / "assets").is_dir():
+    app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    if full_path.startswith(API_PREFIXES):
+        raise HTTPException(status_code=404, detail="Not Found")
+    candidate = STATIC_DIR / full_path
+    if candidate.is_file():
+        return FileResponse(candidate)
+    index = STATIC_DIR / "index.html"
+    if index.is_file():
+        return FileResponse(index)
+    raise HTTPException(status_code=404, detail="Not Found")

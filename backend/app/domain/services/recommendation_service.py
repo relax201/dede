@@ -1,76 +1,31 @@
-"""Recommendation domain service — Ensemble + Risk + SHAP explanation"""
+"""Recommendation domain service — heuristic from SAHMK candles + live quote."""
 
 from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Any
-from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.domain.services.historical_service import HistoricalService
+from app.domain.services.signal_engine import heuristic_score
 from app.domain.symbols import normalize_symbol
 from app.infrastructure.cache.redis_client import redis_client
 from app.infrastructure.db.models import Company, Recommendation
+from app.infrastructure.external.quote_router import QuoteRouter
 from app.schemas.stock import RecommendationResponse, ShapContribution
+from ml.ensemble.ensemble_model import compute_stops
 
 logger = logging.getLogger(__name__)
-
-# Import ensemble helpers from ML package when available on PYTHONPATH
-try:
-    from ml.ensemble.ensemble_model import (
-        build_arabic_explanation,
-        classify_action,
-        combine_scores,
-        compute_stops,
-        sentiment_to_unit_interval,
-    )
-except ImportError:  # pragma: no cover — lightweight fallback for isolated API tests
-    def classify_action(score: float) -> str:
-        if score > 0.80:
-            return "strong_buy"
-        if score >= 0.60:
-            return "buy"
-        if score >= 0.40:
-            return "hold"
-        return "sell"
-
-    def combine_scores(xgb: float, lstm: float, prophet: float, sentiment: float, weights=None) -> float:
-        return max(0.0, min(1.0, 0.35 * xgb + 0.30 * lstm + 0.15 * prophet + 0.20 * sentiment))
-
-    def sentiment_to_unit_interval(s: float) -> float:
-        return max(0.0, min(1.0, (s + 1.0) / 2.0))
-
-    def compute_stops(entry: float, atr: float, action: str, params=None) -> dict[str, float]:
-        risk = atr * 2.0
-        reward = risk * 2.5
-        if action == "sell":
-            return {
-                "entry_price": entry,
-                "stop_loss": entry + risk,
-                "take_profit": entry - reward,
-                "risk_reward": 2.5,
-                "atr_value": atr,
-            }
-        return {
-            "entry_price": entry,
-            "stop_loss": entry - risk,
-            "take_profit": entry + reward,
-            "risk_reward": 2.5,
-            "atr_value": atr,
-        }
-
-    def build_arabic_explanation(action: str, confidence: float, shap_top: list) -> str:
-        return f"التوصية {action} بثقة {confidence:.1%}"
 
 
 class RecommendationService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def get_by_symbol(self, symbol: str, horizon_days: int = 5) -> RecommendationResponse:
+    async def get_by_symbol(self, symbol: str, horizon_days: int = 5) -> RecommendationResponse:
         forms = normalize_symbol(symbol)
         if horizon_days not in (5, 10, 20):
             raise ValueError("horizon_days must be 5, 10, or 20")
@@ -80,74 +35,93 @@ class RecommendationService:
         if isinstance(cached, dict):
             return RecommendationResponse.model_validate(cached)
 
-        company = self.db.scalar(
-            select(Company).where(
-                (Company.symbol == forms.bare) | (Company.symbol_lseg == forms.lseg)
-            )
-        )
-        if company is None:
-            raise LookupError(f"Symbol not found: {forms.display}")
+        stored = self._from_db(forms.bare, forms.lseg, horizon_days)
+        if stored is not None:
+            redis_client.set_json(cache_key, stored.model_dump(mode="json"), ttl_seconds=300)
+            return stored
 
-        reco = self.db.scalar(
-            select(Recommendation)
-            .where(
-                Recommendation.company_id == company.id,
-                Recommendation.status == "active",
-                Recommendation.horizon_days == horizon_days,
-            )
-            .order_by(Recommendation.generated_at.desc())
-            .limit(1)
-        )
-        if reco is not None:
-            response = self._to_response(forms.display, reco)
-            redis_client.set_json(cache_key, response.model_dump(mode="json"), ttl_seconds=300)
-            return response
-
-        response = self._infer_live(forms.display, horizon_days=horizon_days)
-        redis_client.set_json(cache_key, response.model_dump(mode="json"), ttl_seconds=300)
+        response = await self._infer_from_market(forms.bare, horizon_days=horizon_days)
+        redis_client.set_json(cache_key, response.model_dump(mode="json"), ttl_seconds=180)
         return response
 
-    def _infer_live(self, symbol: str, horizon_days: int = 5) -> RecommendationResponse:
-        """
-        Placeholder for Inference Service call.
-        في الإنتاج: استدعاء خدمة الاستدلال (MLflow champion) لأفق 5/10/20 + ATR من ClickHouse.
-        """
-        xgb, lstm, prophet, sentiment = 0.62, 0.58, 0.55, 0.10
-        score = combine_scores(xgb, lstm, prophet, sentiment_to_unit_interval(sentiment))
-        action = classify_action(score)
-        entry = 100.0
-        atr = 1.5
-        stops = compute_stops(entry, atr, action)
+    async def list_live(self, symbols: list[str], horizon_days: int = 5) -> list[RecommendationResponse]:
+        out: list[RecommendationResponse] = []
+        for symbol in symbols:
+            try:
+                out.append(await self.get_by_symbol(symbol, horizon_days=horizon_days))
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Reco skipped for %s: %s", symbol, exc)
+        return sorted(out, key=lambda r: r.confidence, reverse=True)
+
+    def _from_db(self, bare: str, lseg: str, horizon_days: int) -> RecommendationResponse | None:
+        try:
+            company = self.db.scalar(
+                select(Company).where((Company.symbol == bare) | (Company.symbol_lseg == lseg))
+            )
+            if company is None:
+                return None
+            reco = self.db.scalar(
+                select(Recommendation)
+                .where(
+                    Recommendation.company_id == company.id,
+                    Recommendation.status == "active",
+                    Recommendation.horizon_days == horizon_days,
+                )
+                .order_by(Recommendation.generated_at.desc())
+                .limit(1)
+            )
+            if reco is None:
+                return None
+            return self._to_response(bare, reco)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("DB reco lookup skipped: %s", exc)
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
+            return None
+
+    async def _infer_from_market(self, symbol: str, horizon_days: int = 5) -> RecommendationResponse:
+        history = HistoricalService()
+        payload = await history.get_candles(symbol, interval="1d", limit=120, persist=False)
+        candles = payload.get("candles") or []
+        analysis = heuristic_score(candles, horizon_days=horizon_days)
+        entry = float(analysis["stops"]["entry_price"])
+        try:
+            quote = await QuoteRouter().get_quote(symbol)
+            if quote.price:
+                entry = float(quote.price)
+                atr = float(analysis["indicators"].get("atr_14") or entry * 0.02)
+                analysis["stops"] = compute_stops(entry, atr, analysis["action"])
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Live quote not applied to reco %s: %s", symbol, exc)
+
         shap = [
-            ShapContribution(feature="rsi_14", shap_value=0.12),
-            ShapContribution(feature="macd_hist", shap_value=0.09),
-            ShapContribution(feature="volatility_20", shap_value=-0.04),
+            ShapContribution(feature=str(item["feature"]), shap_value=float(item["shap_value"]))
+            for item in analysis["shap"]
         ]
-        explanation = build_arabic_explanation(
-            action, score, [s.model_dump() for s in shap]  # type: ignore[arg-type]
-        )
-        explanation = f"{explanation} أفق التحليل: {horizon_days} أيام تداول."
         return RecommendationResponse(
             symbol=symbol,
-            action=action,  # type: ignore[arg-type]
-            confidence=score,
-            ensemble_score=score,
+            action=analysis["action"],
+            confidence=float(analysis["score"]),
+            ensemble_score=float(analysis["score"]),
             horizon_days=horizon_days,  # type: ignore[arg-type]
-            entry_price=stops["entry_price"],
-            stop_loss=stops["stop_loss"],
-            take_profit=stops["take_profit"],
-            risk_reward=stops["risk_reward"],
-            atr_value=stops["atr_value"],
+            entry_price=float(analysis["stops"]["entry_price"]),
+            stop_loss=float(analysis["stops"]["stop_loss"]),
+            take_profit=float(analysis["stops"]["take_profit"]),
+            risk_reward=float(analysis["stops"]["risk_reward"]),
+            atr_value=float(analysis["stops"].get("atr_value") or 0),
             shap=shap,
-            explanation_ar=explanation,
-            model_version=settings.MODEL_ENSEMBLE_VERSION,
+            explanation_ar=str(analysis["explanation_ar"]),
+            model_version=str(analysis["model_version"]),
             generated_at=datetime.now(timezone.utc),
             disclaimer_ar=settings.LEGAL_DISCLAIMER_AR,
+            risk_level=analysis.get("risk_level"),
         )
 
     @staticmethod
     def _to_response(symbol: str, reco: Recommendation) -> RecommendationResponse:
-        shap_raw: Any = reco.shap_summary or {}
+        shap_raw = reco.shap_summary or {}
         contributions = shap_raw.get("contributions", shap_raw.get("top_features", []))
         shap = [
             ShapContribution(

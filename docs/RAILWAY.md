@@ -4,8 +4,9 @@
 
 ## الإنتاج الحالي
 
-- **API:** https://dede-production-c796.up.railway.app/
+- **التطبيق (واجهة + API):** https://dede-production-c796.up.railway.app/
 - المستودع: `relax201/dede` · الفرع `main`
+- خدمة واحدة تكفي: `Dockerfile.railway.api` يبني React ويقدّمه من FastAPI على `/`
 - بعد كل Push على `main` يعيد Railway البناء تلقائياً (إن كان مفعّلاً).
 
 ### تحقق سريع
