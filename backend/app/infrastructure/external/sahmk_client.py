@@ -156,17 +156,56 @@ class SahmkClient:
         interval: str = "1d",
         limit: int = 365,
         offset: int = 0,
+        from_date: str | None = None,
+        to_date: str | None = None,
     ) -> dict[str, Any]:
-        """GET /historical/{symbol}/ — OHLCV bars."""
+        """GET /historical/{symbol}/ — OHLCV bars (1d/1w/1m/30m/60m)."""
         if not self.configured:
             raise RuntimeError("SAHMK_API_KEY is not configured")
         bare = to_provider_symbol(symbol, "sahmk")
         url = f"{self.base_url}/historical/{bare}/"
+        params: dict[str, Any] = {"interval": interval, "limit": limit, "offset": offset}
+        if from_date:
+            params["from"] = from_date
+        if to_date:
+            params["to"] = to_date
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.get(
                 url,
                 headers=self._headers(),
-                params={"interval": interval, "limit": limit, "offset": offset},
+                params=params,
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def get_depth(self, symbol: str, levels: int = 10) -> dict[str, Any]:
+        """GET /market/depth/{symbol}/ — order book (entitlement-gated, levels 1–20)."""
+        if not self.configured:
+            raise RuntimeError("SAHMK_API_KEY is not configured")
+        bare = to_provider_symbol(symbol, "sahmk")
+        url = f"{self.base_url}/market/depth/{bare}/"
+        lvl = max(1, min(int(levels), 20))
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"levels": lvl},
+            )
+            resp.raise_for_status()
+            return resp.json()
+
+    async def get_trades(self, symbol: str, limit: int = 50) -> dict[str, Any]:
+        """GET /market/trades/{symbol}/ — recent live trade prints (Pro+, limit 1–200)."""
+        if not self.configured:
+            raise RuntimeError("SAHMK_API_KEY is not configured")
+        bare = to_provider_symbol(symbol, "sahmk")
+        url = f"{self.base_url}/market/trades/{bare}/"
+        lim = max(1, min(int(limit), 200))
+        async with httpx.AsyncClient(timeout=self.timeout) as client:
+            resp = await client.get(
+                url,
+                headers=self._headers(),
+                params={"limit": lim},
             )
             resp.raise_for_status()
             return resp.json()

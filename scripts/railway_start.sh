@@ -11,7 +11,7 @@ case "${DATABASE_URL:-}" in
 esac
 
 # Pin release so stale APP_VERSION env does not hide the build
-export APP_VERSION="2.3.0"
+export APP_VERSION="2.4.0"
 
 echo "[tasi] boot PORT=${PORT} STATIC_DIR=${STATIC_DIR:-/app/static} DB=${DATABASE_URL%%\?*}"
 ls -la "${STATIC_DIR:-/app/static}" | head -20 || true

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Brand
     APP_NAME: str = "تاسي فيجن — TASI Vision"
-    APP_VERSION: str = "2.3.0"
+    APP_VERSION: str = "2.4.0"
     BRAND_NAME_AR: str = "تاسي فيجن"
     BRAND_NAME_EN: str = "TASI Vision"
     DEBUG: bool = False

@@ -23,8 +23,8 @@ TASI2050/
 │   │   ├── main.py
 │   │   ├── api/v1/endpoints/    # stock, recommendation, portfolio, market
 │   │   ├── core/                # config, security
-│   │   ├── domain/services/     # business logic
-│   │   ├── infrastructure/      # db, redis
+│   │   ├── domain/services/     # historical, market_book, recommendations
+│   │   ├── infrastructure/      # db, redis, sahmk_client (quotes/history/depth/trades)
 │   │   ├── schemas/             # Pydantic / OpenAPI
 │   │   └── websockets/          # /ws/live
 │   └── tests/unit/
@@ -42,10 +42,20 @@ TASI2050/
 │   ├── Dockerfile
 │   ├── src/pages/Dashboard.tsx
 │   ├── src/components/PriceChart.tsx
+│   ├── src/components/OrderBook.tsx
+│   ├── src/components/TradeTape.tsx
 │   └── src/styles/dashboard.css
 └── infrastructure/
     └── monitoring/prometheus.yml
 ```
+
+## SAHMK data surfaces (v2.4)
+
+| Endpoint | Source |
+|----------|--------|
+| `GET /api/stock/{symbol}/candles` | `GET /historical/{symbol}/` (1d/1w/1m/30m/60m) |
+| `GET /api/stock/{symbol}/depth` | `GET /market/depth/{symbol}/` |
+| `GET /api/stock/{symbol}/trades` | `GET /market/trades/{symbol}/` |
 
 ## طبقات Clean Architecture (Backend)
 

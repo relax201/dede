@@ -1,4 +1,11 @@
-import type { Candle, Company, MarketOverview, Recommendation } from "../types/market";
+import type {
+  Candle,
+  Company,
+  MarketDepth,
+  MarketOverview,
+  Recommendation,
+  TradesTape,
+} from "../types/market";
 
 const API_URL = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
@@ -47,14 +54,38 @@ export async function fetchMarketOverview(): Promise<MarketOverview> {
   }
 }
 
-export async function fetchCandles(symbol: string, limit = 120): Promise<Candle[]> {
+export async function fetchCandles(
+  symbol: string,
+  limit = 120,
+  interval = "1d"
+): Promise<Candle[]> {
   try {
     const data = await getJson<{ candles: Candle[] }>(
-      `/api/stock/${encodeURIComponent(symbol)}/candles?interval=1d&limit=${limit}`
+      `/api/stock/${encodeURIComponent(symbol)}/candles?interval=${encodeURIComponent(interval)}&limit=${limit}`
     );
     return data.candles ?? [];
   } catch {
     return [];
+  }
+}
+
+export async function fetchDepth(symbol: string, levels = 10): Promise<MarketDepth | null> {
+  try {
+    return await getJson<MarketDepth>(
+      `/api/stock/${encodeURIComponent(symbol)}/depth?levels=${levels}`
+    );
+  } catch {
+    return null;
+  }
+}
+
+export async function fetchTrades(symbol: string, limit = 40): Promise<TradesTape | null> {
+  try {
+    return await getJson<TradesTape>(
+      `/api/stock/${encodeURIComponent(symbol)}/trades?limit=${limit}`
+    );
+  } catch {
+    return null;
   }
 }
 

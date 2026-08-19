@@ -59,4 +59,4 @@ async def test_get_candles_sorted_and_cached(monkeypatch: pytest.MonkeyPatch) ->
     assert out["count"] == 2
     assert out["candles"][0]["time"] == "2026-07-13"
     assert out["candles"][1]["time"] == "2026-07-14"
-    assert "candles:2222:1d:10" in stored
+    assert "candles:2222:1d:10::" in stored

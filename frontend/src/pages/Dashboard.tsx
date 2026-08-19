@@ -1,25 +1,42 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { LegalDisclaimer } from "../components/LegalDisclaimer";
+import { OrderBook } from "../components/OrderBook";
 import { PriceChart } from "../components/PriceChart";
+import { TradeTape } from "../components/TradeTape";
 import { useLiveQuotes } from "../hooks/useLiveQuotes";
 import {
   createPortfolio,
   fetchCandles,
   fetchCompanies,
+  fetchDepth,
   fetchHealthDetail,
   fetchMarketOverview,
   fetchPortfolioPerformance,
   fetchRecommendation,
   fetchRecommendations,
   fetchStock,
+  fetchTrades,
   listPortfolios,
   loginAccount,
   registerAccount,
 } from "../services/api";
-import type { Candle, Company, MarketOverview, Recommendation } from "../types/market";
+import type {
+  Candle,
+  Company,
+  MarketDepth,
+  MarketOverview,
+  Recommendation,
+  TradesTape,
+} from "../types/market";
 
 const RISK_LEVELS = ["الكل", "low", "medium", "high"] as const;
 const HORIZONS = [5, 10, 20] as const;
+const INTERVALS = [
+  { value: "1d", label: "يومي", limit: 120 },
+  { value: "1w", label: "أسبوعي", limit: 104 },
+  { value: "60m", label: "60د", limit: 120 },
+  { value: "30m", label: "30د", limit: 120 },
+] as const;
 const TOKEN_KEY = "tasi.token";
 
 const actionLabel: Record<Recommendation["action"], string> = {
@@ -38,8 +55,13 @@ export function Dashboard() {
   const [risk, setRisk] = useState<(typeof RISK_LEVELS)[number]>("الكل");
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(5);
   const [selected, setSelected] = useState("2222");
+  const [candleInterval, setCandleInterval] =
+    useState<(typeof INTERVALS)[number]["value"]>("1d");
   const [detail, setDetail] = useState<Recommendation | null>(null);
   const [candles, setCandles] = useState<Candle[]>([]);
+  const [depth, setDepth] = useState<MarketDepth | null>(null);
+  const [tape, setTape] = useState<TradesTape | null>(null);
+  const [bookLoading, setBookLoading] = useState(false);
   const [stockName, setStockName] = useState("2222");
   const [health, setHealth] = useState({ postgres: false, redis: false });
   const [token, setToken] = useState(() => localStorage.getItem(TOKEN_KEY) ?? "");
@@ -95,7 +117,8 @@ export function Dashboard() {
   useEffect(() => {
     let alive = true;
     (async () => {
-      const bars = await fetchCandles(selected, 120);
+      const meta = INTERVALS.find((i) => i.value === candleInterval) ?? INTERVALS[0];
+      const bars = await fetchCandles(selected, meta.limit, candleInterval);
       if (alive) setCandles(bars);
       try {
         const quote = await fetchStock(selected);
@@ -109,7 +132,31 @@ export function Dashboard() {
     return () => {
       alive = false;
     };
-  }, [selected, horizon]);
+  }, [selected, horizon, candleInterval]);
+
+  useEffect(() => {
+    let alive = true;
+    let timer: number | undefined;
+
+    const loadBook = async () => {
+      setBookLoading(true);
+      const [d, t] = await Promise.all([fetchDepth(selected, 10), fetchTrades(selected, 40)]);
+      if (!alive) return;
+      setDepth(d);
+      setTape(t);
+      setBookLoading(false);
+    };
+
+    void loadBook();
+    timer = window.setInterval(() => {
+      void loadBook();
+    }, 4000);
+
+    return () => {
+      alive = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, [selected]);
 
   useEffect(() => {
     if (!token) return;
@@ -195,7 +242,7 @@ export function Dashboard() {
           <h1 className="dash__logo">تاسي فيجن</h1>
           <p className="dash__logo-en">TASI Vision</p>
           <p className="dash__tag">
-            بث سهمك · أفق {horizon} أيام · WS:{" "}
+            بث سهمك · تاريخ · عمق · صفقات · أفق {horizon} أيام · WS:{" "}
             {wsStatus === "open" ? "متصل" : wsStatus === "connecting" ? "يتصل…" : "منقطع"}
             {" · "}
             DB: {health.postgres ? "جاهز" : "محلي/غير مربوط"} · Redis:{" "}
@@ -274,6 +321,21 @@ export function Dashboard() {
             <option value={20}>20 يوم</option>
           </select>
         </label>
+        <label>
+          إطار الشموع
+          <select
+            value={candleInterval}
+            onChange={(e) =>
+              setCandleInterval(e.target.value as (typeof INTERVALS)[number]["value"])
+            }
+          >
+            {INTERVALS.map((i) => (
+              <option key={i.value} value={i.value}>
+                {i.label}
+              </option>
+            ))}
+          </select>
+        </label>
       </section>
 
       {!!companyHits.length && (
@@ -296,7 +358,7 @@ export function Dashboard() {
               {live?.price != null ? ` · ${live.price.toFixed(2)}` : ""}
             </h2>
             <p>
-              {stockName} · شموع سهمك
+              {stockName} · شموع سهمك ({candleInterval})
               {candles.length ? ` (${candles.length})` : " — جاري التحميل"}
             </p>
           </div>
@@ -366,6 +428,11 @@ export function Dashboard() {
             )}
           </ul>
         </section>
+      </div>
+
+      <div className="dash__micro">
+        <OrderBook depth={depth} loading={bookLoading} />
+        <TradeTape tape={tape} loading={bookLoading} />
       </div>
 
       <section className="account-panel" aria-label="الحساب والمحفظة">

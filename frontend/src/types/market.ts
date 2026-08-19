@@ -30,9 +30,54 @@ export interface MarketOverview {
 }
 
 export interface Candle {
-  time: string;
+  time: string | number;
   open: number;
   high: number;
   low: number;
   close: number;
+  volume?: number;
+}
+
+export interface DepthLevel {
+  level?: number | null;
+  price: number | null;
+  quantity: number;
+  order_count?: number | null;
+}
+
+export interface MarketDepth {
+  symbol: string;
+  updated_at?: string | null;
+  session?: string | null;
+  book_state?: string | null;
+  levels?: number | null;
+  entitled_levels?: number | null;
+  best_bid?: number | null;
+  best_ask?: number | null;
+  spread?: number | null;
+  spread_bps?: number | null;
+  level_imbalance?: number | null;
+  bids: DepthLevel[];
+  asks: DepthLevel[];
+}
+
+export interface TradeEvent {
+  event_time?: string | null;
+  price: number | null;
+  quantity: number;
+  value?: number | null;
+  side?: string | null;
+}
+
+export interface TradesTape {
+  symbol: string;
+  updated_at?: string | null;
+  count: number;
+  summary?: {
+    event_count?: number | null;
+    trade_quantity?: number | null;
+    trade_value?: number | null;
+    latest_event_time?: string | null;
+  };
+  events: TradeEvent[];
 }

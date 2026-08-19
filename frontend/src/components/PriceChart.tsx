@@ -59,7 +59,7 @@ export function PriceChart({ candles }: Props) {
     if (!seriesRef.current) return;
     seriesRef.current.setData(
       candles.map((c) => ({
-        time: c.time as unknown as string,
+        time: c.time as never,
         open: c.open,
         high: c.high,
         low: c.low,

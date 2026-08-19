@@ -276,6 +276,128 @@ body {
   padding-top: 0.75rem;
 }
 
+.dash__micro {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1rem;
+  margin-top: 1.25rem;
+  animation: rise 0.95s ease 0.22s both;
+}
+
+.book-panel,
+.tape-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 0.75rem;
+  min-width: 0;
+}
+
+.book-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin-bottom: 0.65rem;
+  font-family: var(--font-en);
+}
+
+.book-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem;
+}
+
+.book-head,
+.book-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  align-items: center;
+  font-size: 0.82rem;
+  padding: 0.28rem 0.35rem;
+}
+
+.book-head {
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.25rem;
+}
+
+.book-row {
+  position: relative;
+  font-family: var(--font-en);
+  isolation: isolate;
+}
+
+.book-row::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--fill, 0%);
+  opacity: 0.22;
+  z-index: -1;
+  transition: width 0.35s ease;
+}
+
+.book-col--ask .book-row::before {
+  right: 0;
+  left: auto;
+  background: var(--danger);
+}
+
+.book-col--bid .book-row::before {
+  left: 0;
+  background: var(--accent-2);
+}
+
+.book-col--ask strong {
+  color: var(--danger);
+  text-align: left;
+}
+
+.book-col--bid strong {
+  color: var(--accent-2);
+}
+
+.tape-table-wrap {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.tape-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-en);
+  font-size: 0.84rem;
+}
+
+.tape-table th,
+.tape-table td {
+  text-align: right;
+  padding: 0.35rem 0.4rem;
+  border-bottom: 1px solid rgba(243, 247, 245, 0.08);
+}
+
+.tape-table th {
+  color: var(--muted);
+  font-weight: 500;
+  position: sticky;
+  top: 0;
+  background: rgba(6, 20, 31, 0.92);
+}
+
+.tape-table tr.is-buy td:nth-child(2) {
+  color: var(--accent-2);
+}
+
+.tape-table tr.is-sell td:nth-child(2) {
+  color: var(--danger);
+}
+
+.tape-table tbody tr {
+  animation: rise 0.35s ease both;
+}
+
 .chart-shell {
   width: 100%;
   min-height: 360px;
@@ -389,7 +511,9 @@ body {
 
 @media (max-width: 900px) {
   .dash__overview,
-  .dash__grid {
+  .dash__grid,
+  .dash__micro,
+  .book-grid {
     grid-template-columns: 1fr;
   }
 
