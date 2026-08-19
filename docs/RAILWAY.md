@@ -2,6 +2,25 @@
 
 الهدف: مشروع Railway واحد بخدمات **Postgres + Redis + api + web**.
 
+## الإنتاج الحالي
+
+- **API:** https://dede-production-c796.up.railway.app/
+- المستودع: `relax201/dede` · الفرع `main`
+- بعد كل Push على `main` يعيد Railway البناء تلقائياً (إن كان مفعّلاً).
+
+### تحقق سريع
+
+```bash
+curl -s https://dede-production-c796.up.railway.app/api/health
+curl -s https://dede-production-c796.up.railway.app/api/health/detail
+curl -s https://dede-production-c796.up.railway.app/api/stream/status
+```
+
+إذا ظهر `"postgres": false` أو `"redis": false` في `/api/health/detail`، اربط المتغيرات:
+
+- `DATABASE_URL` = `${{Postgres.DATABASE_URL}}`
+- `REDIS_URL` = `${{Redis.REDIS_URL}}` أو `${{Redis.REDIS_PRIVATE_URL}}`
+
 ## الطريقة أ — من لوحة Railway (موصى بها)
 
 1. افتح [railway.app/new](https://railway.app/new) → **Deploy from GitHub repo**  
@@ -39,17 +58,10 @@
 
 | المتغير | القيمة |
 |---------|--------|
-| `VITE_API_URL` | `https://<api-domain>` |
-| `VITE_WS_URL` | `wss://<api-domain>` |
+| `VITE_API_URL` | `https://dede-production-c796.up.railway.app` |
+| `VITE_WS_URL` | `wss://dede-production-c796.up.railway.app` |
 
 8. أعد Deploy للواجهة بعد تثبيت الدومينات و`VITE_*`.
-
-### تحقق سريع
-
-```bash
-curl -s https://<api-domain>/api/health
-# افتح https://<web-domain>
-```
 
 ## الطريقة ب — عبر CLI (يحتاج توكن)
 
@@ -58,11 +70,7 @@ curl -s https://<api-domain>/api/health
 
 ```bash
 export RAILWAY_TOKEN=...
-railway login --browserless   # أو استخدم التوكن مباشرة
-railway init
-railway add --database postgres
-railway add --database redis
-# اربط خدمتين من المستودع مع Dockerfile.railway.api / Dockerfile.railway.web
+railway whoami
 ```
 
 بدون `RAILWAY_TOKEN` لا يمكن للوكيل إكمال النشر تلقائياً.
@@ -71,5 +79,6 @@ railway add --database redis
 
 - Railway يحقن `PORT` تلقائياً — الـ Dockerfiles جاهزة لذلك.
 - WebSocket على نفس نطاق الـ api عبر `wss://`.
+- عند الإقلاع يُنشئ الـ API جداول Postgres تلقائياً إن لم تكن موجودة.
 - لا ترفع `.env` إلى Git؛ الأسرار في Railway Variables فقط.
 - أسماء خدمات Postgres/Redis في `${{...}}` قد تختلف قليلاً حسب تسمية الخدمة في المشروع — اختر المرجع من قائمة Variables في الواجهة.

@@ -31,11 +31,19 @@ class StockService:
 
     async def get_stock(self, symbol: str) -> StockResponse:
         forms = normalize_symbol(symbol)
-        company = self.db.scalar(
-            select(Company).where(
-                (Company.symbol == forms.bare) | (Company.symbol_lseg == forms.lseg)
+        company = None
+        try:
+            company = self.db.scalar(
+                select(Company).where(
+                    (Company.symbol == forms.bare) | (Company.symbol_lseg == forms.lseg)
+                )
             )
-        )
+        except Exception as exc:  # noqa: BLE001 — DB may be empty before migrations
+            logger.warning("Company lookup skipped for %s: %s", forms.bare, exc)
+            try:
+                self.db.rollback()
+            except Exception:  # noqa: BLE001
+                pass
 
         # Enrich from SAHMK even if company row missing (first-time symbol)
         name_ar = company.name_ar if company else forms.display

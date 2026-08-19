@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api.deps import DbSession, rate_limit
 from app.domain.services.stock_service import StockService
 from app.schemas.stock import ErrorResponse, StockResponse
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["stocks"])
 
 
@@ -28,7 +31,8 @@ async def get_stock(
     except LookupError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except Exception as exc:  # noqa: BLE001
+        logger.exception("stock lookup failed for %s", symbol)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="فشل جلب بيانات السهم",
+            detail=f"فشل جلب بيانات السهم: {exc}",
         ) from exc

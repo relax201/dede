@@ -25,6 +25,13 @@ logger = logging.getLogger("tasi.api")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
+    try:
+        from app.infrastructure.db.session import ensure_schema
+
+        ensure_schema()
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Schema bootstrap failed (API will degrade): %s", exc)
+
     stream = None
     if settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY:
         from app.infrastructure.external import sahmk_ws as sahmk_ws_mod

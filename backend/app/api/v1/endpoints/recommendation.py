@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Literal
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.api.deps import DbSession, rate_limit
@@ -23,13 +21,13 @@ router = APIRouter(tags=["recommendations"])
 async def get_recommendation(
     symbol: str,
     db: DbSession,
-    horizon: Literal[5, 10, 20] = Query(
+    horizon: int = Query(
         default=5,
         description="أفق التوصية بالأيام — الأساسي 5، الاختياري 10 أو 20",
     ),
     _: None = Depends(rate_limit),
 ) -> RecommendationResponse:
-    if horizon not in settings.forward_horizons:
+    if horizon not in (5, 10, 20) or horizon not in settings.forward_horizons:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"الأفق المسموح: {settings.forward_horizons}",

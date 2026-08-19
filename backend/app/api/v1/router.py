@@ -5,6 +5,9 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from app.api.v1.endpoints import companies, market, portfolio, recommendation, stock, stream
+from app.infrastructure.cache import memory_quotes
+from app.infrastructure.cache.redis_client import redis_client
+from app.infrastructure.db.session import ping_db
 
 api_router = APIRouter()
 api_router.include_router(stock.router)
@@ -18,3 +21,18 @@ api_router.include_router(companies.router)
 @api_router.get("/health", tags=["health"], summary="فحص الصحة")
 async def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@api_router.get("/health/detail", tags=["health"], summary="فحص الصحة التفصيلي")
+async def health_detail() -> dict:
+    redis_ok = False
+    try:
+        redis_ok = bool(redis_client.client.ping())
+    except Exception:  # noqa: BLE001
+        redis_ok = False
+    return {
+        "status": "ok",
+        "postgres": ping_db(),
+        "redis": redis_ok,
+        "memory_quotes": memory_quotes.stats(),
+    }

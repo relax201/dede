@@ -13,6 +13,7 @@ from datetime import datetime
 from app.core.config import settings
 from app.domain.market_session import RIYADH, is_market_open
 from app.domain.symbols import normalize_symbol
+from app.infrastructure.cache import memory_quotes
 from app.infrastructure.cache.redis_client import redis_client
 from app.infrastructure.external.base import LiveQuote
 from app.infrastructure.external.lseg_client import LsegClient
@@ -37,9 +38,32 @@ class QuoteRouter:
 
     async def get_quote(self, symbol: str) -> LiveQuote:
         forms = normalize_symbol(symbol)
+        # Prefer fresh WS/memory tick when available (works even if Redis is down)
+        mem = memory_quotes.get_quote(forms.bare)
+        if isinstance(mem, dict) and "price" in mem:
+            return self._quote_from_cached(forms.bare, mem, stale=False)
         if is_market_open():
             return await self._in_session(forms.bare)
         return await self._after_close(forms.bare)
+
+    def _quote_from_cached(self, bare: str, cached: dict, *, stale: bool) -> LiveQuote:
+        ts_raw = cached.get("ts")
+        try:
+            ts = datetime.fromisoformat(str(ts_raw)) if ts_raw else datetime.now(RIYADH)
+        except ValueError:
+            ts = datetime.now(RIYADH)
+        return LiveQuote(
+            symbol_bare=bare,
+            price=float(cached["price"]),
+            change_pct=float(cached.get("change_pct") or 0.0),
+            volume=float(cached.get("volume") or 0.0),
+            high=float(cached["high"]) if cached.get("high") is not None else None,
+            low=float(cached["low"]) if cached.get("low") is not None else None,
+            ts=ts,
+            source="redis_cache",
+            stale=stale,
+            raw=cached,
+        )
 
     async def _in_session(self, bare: str) -> LiveQuote:
         # 1) SAHMK primary
@@ -93,37 +117,26 @@ class QuoteRouter:
 
     def _cache(self, quote: LiveQuote) -> None:
         ttl = settings.SAHMK_TICK_INTERVAL_SECONDS * 4  # ~12s during session
+        payload = {
+            "price": quote.price,
+            "change_pct": quote.change_pct,
+            "volume": quote.volume,
+            "high": quote.high,
+            "low": quote.low,
+            "ts": quote.ts.isoformat(),
+            "source": quote.source,
+        }
+        memory_quotes.put_quote(quote.symbol_bare, payload)
         redis_client.set_json(
             f"quote:{quote.symbol_bare}",
-            {
-                "price": quote.price,
-                "change_pct": quote.change_pct,
-                "volume": quote.volume,
-                "high": quote.high,
-                "low": quote.low,
-                "ts": quote.ts.isoformat(),
-                "source": quote.source,
-            },
+            payload,
             ttl_seconds=max(ttl, 30),
         )
 
     def _from_redis_or_raise(self, bare: str) -> LiveQuote:
-        cached = redis_client.get_json(f"quote:{bare}")
+        cached = memory_quotes.get_quote(bare)
+        if not (isinstance(cached, dict) and "price" in cached):
+            cached = redis_client.get_json(f"quote:{bare}")
         if isinstance(cached, dict) and "price" in cached:
-            ts_raw = cached.get("ts")
-            try:
-                ts = datetime.fromisoformat(str(ts_raw)) if ts_raw else datetime.now(RIYADH)
-            except ValueError:
-                ts = datetime.now(RIYADH)
-            return LiveQuote(
-                symbol_bare=bare,
-                price=float(cached["price"]),
-                change_pct=float(cached.get("change_pct", 0.0)),
-                volume=float(cached.get("volume", 0.0)),
-                high=float(cached["high"]) if cached.get("high") is not None else None,
-                low=float(cached["low"]) if cached.get("low") is not None else None,
-                ts=ts,
-                source="redis_cache",
-                stale=True,
-            )
+            return self._quote_from_cached(bare, cached, stale=True)
         raise LookupError(f"No live or cached quote available for {bare}")

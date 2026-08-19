@@ -24,7 +24,7 @@ async def list_companies(
         # lazy sync if cache empty
         try:
             synced = await CompanySyncService(db=None).sync_tasi(enrich_sectors=False)
-            rows = service.list_cached() or synced.get("sample") or []
+            rows = service.list_cached() or list(synced.get("companies") or synced.get("sample") or [])
         except Exception as exc:  # noqa: BLE001
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

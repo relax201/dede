@@ -215,8 +215,9 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 - ✅ **مزامنة شركات تاسي** (`POST /api/companies/sync`) — ~270 شركة
 - ✅ **شموع تاريخية** (`GET /api/stock/{symbol}/candles`) + تسخين الكون
 - ✅ **Dashboard** مربوط بـ `/ws/live` والشموع الحقيقية
-- ✅ **نشر Railway** جاهز (`docs/RAILWAY.md`, `Dockerfile.railway.api`, `Dockerfile.railway.web`)
-- ⏳ ربط مشروع Railway + Postgres/Redis + متغيرات الأسرار
+- ✅ **نشر Railway** حي: https://dede-production-c796.up.railway.app/
+- ⏳ خدمة **web** (واجهة React) إن لم تُنشأ بعد + ضبط `VITE_*`
+- ⏳ التأكد من `DATABASE_URL` / `REDIS_URL` عبر `/api/health/detail`
 - ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY`
 
 ```bash

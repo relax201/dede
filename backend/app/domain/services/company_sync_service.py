@@ -17,7 +17,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-COMPANIES_FILE = Path(__file__).resolve().parents[4] / "data" / "companies_tasi.json"
+COMPANIES_FILE = Path("/tmp/tasi_companies.json")
+_MEMORY_COMPANIES: list[dict[str, Any]] = []
 
 
 class CompanySyncService:
@@ -76,6 +77,8 @@ class CompanySyncService:
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Sector enrich failed for %s: %s", sym, exc)
 
+        global _MEMORY_COMPANIES
+        _MEMORY_COMPANIES = list(companies)
         redis_client.set_json("symbols:all", companies, ttl_seconds=3600)
         redis_client.set_json(
             "symbols:meta",
@@ -95,12 +98,15 @@ class CompanySyncService:
             "count": len(companies),
             "db_upserts": db_upserts,
             "sample": companies[:5],
+            "companies": companies,
         }
 
     def list_cached(self) -> list[dict[str, Any]]:
         cached = redis_client.get_json("symbols:all")
-        if isinstance(cached, list):
+        if isinstance(cached, list) and cached:
             return cached
+        if _MEMORY_COMPANIES:
+            return list(_MEMORY_COMPANIES)
         if COMPANIES_FILE.exists():
             try:
                 data = json.loads(COMPANIES_FILE.read_text(encoding="utf-8"))

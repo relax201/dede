@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from app.core.config import settings
+from app.infrastructure.cache import memory_quotes
 from app.infrastructure.cache.redis_client import redis_client
 
 logger = logging.getLogger(__name__)
@@ -50,22 +51,20 @@ async def handle_sahmk_quote(message: dict[str, Any]) -> None:
         "mode": message.get("mode"),
     }
 
+    cached = {
+        "price": payload["price"],
+        "change_pct": payload["change_pct"] or 0.0,
+        "volume": payload["volume"] or 0.0,
+        "high": payload["high"],
+        "low": payload["low"],
+        "bid": payload["bid"],
+        "ask": payload["ask"],
+        "ts": payload["ts"],
+        "source": "sahmk_ws",
+    }
+    memory_quotes.put_quote(symbol, cached)
     ttl = max(settings.SAHMK_TICK_INTERVAL_SECONDS * 4, 15)
-    redis_client.set_json(
-        f"quote:{symbol}",
-        {
-            "price": payload["price"],
-            "change_pct": payload["change_pct"] or 0.0,
-            "volume": payload["volume"] or 0.0,
-            "high": payload["high"],
-            "low": payload["low"],
-            "bid": payload["bid"],
-            "ask": payload["ask"],
-            "ts": payload["ts"],
-            "source": "sahmk_ws",
-        },
-        ttl_seconds=ttl,
-    )
+    redis_client.set_json(f"quote:{symbol}", cached, ttl_seconds=ttl)
     redis_client.publish("ws:channel:live", payload)
 
     # In-process fan-out (works even if Redis is down)
