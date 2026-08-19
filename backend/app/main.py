@@ -39,16 +39,19 @@ async def lifespan(app: FastAPI):
     import asyncio
 
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
-    try:
-        from app.infrastructure.db.session import ensure_schema
 
-        await asyncio.wait_for(asyncio.to_thread(ensure_schema), timeout=8.0)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Schema bootstrap failed/skipped: %s", exc)
+    async def _boot_background() -> None:
+        try:
+            from app.infrastructure.db.session import ensure_schema
 
-    stream = None
-    warm_task: asyncio.Task | None = None
-    if settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY:
+            await asyncio.wait_for(asyncio.to_thread(ensure_schema), timeout=8.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Schema bootstrap failed/skipped: %s", exc)
+
+        if not (settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY):
+            logger.warning("SAHMK WebSocket disabled or SAHMK_API_KEY missing")
+            return
+
         from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
         from app.infrastructure.external.sahmk_ws import SahmkStockStream
         from app.infrastructure.messaging.live_bridge import (
@@ -62,31 +65,27 @@ async def lifespan(app: FastAPI):
             ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
         )
         sahmk_ws_mod.sahmk_stream = stream
-        # Start immediately on seed symbols — do NOT block healthchecks
         stream.start()
+        app.state.sahmk_stream = stream
         logger.info("SAHMK WebSocket started on seed universe")
-
-        async def _warm_universe() -> None:
-            if not settings.SAHMK_WS_AUTO_UNIVERSE or settings.SAHMK_WS_SUBSCRIBE_ALL:
-                return
+        if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
             try:
                 universe = await stream.expand_to_plan_limit()
                 logger.info("SAHMK WS auto-universe ready: %s symbols", len(universe))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Auto-universe build failed, using seeds: %s", exc)
 
-        warm_task = asyncio.create_task(_warm_universe(), name="sahmk-warm-universe")
-    else:
-        logger.warning("SAHMK WebSocket disabled or SAHMK_API_KEY missing")
-
+    boot_task = asyncio.create_task(_boot_background(), name="tasi-boot")
+    # Yield immediately — uvicorn can serve /api/health during warm-up
     yield
 
-    if warm_task is not None and not warm_task.done():
-        warm_task.cancel()
+    if not boot_task.done():
+        boot_task.cancel()
         try:
-            await warm_task
+            await boot_task
         except (asyncio.CancelledError, Exception):  # noqa: BLE001
             pass
+    stream = getattr(app.state, "sahmk_stream", None)
     if stream is not None:
         logger.info("Stopping SAHMK WebSocket stream")
         await stream.stop()
@@ -175,8 +174,8 @@ async def api_meta() -> dict:
     return _meta_payload()
 
 
-@app.get("/", include_in_schema=False)
-async def root() -> FileResponse | dict:
+@app.get("/", include_in_schema=False, response_model=None)
+async def root():
     index = STATIC_DIR / "index.html"
     if index.is_file():
         return FileResponse(index)
@@ -187,7 +186,7 @@ if (STATIC_DIR / "assets").is_dir():
     app.mount("/assets", StaticFiles(directory=STATIC_DIR / "assets"), name="assets")
 
 
-@app.get("/{full_path:path}", include_in_schema=False)
+@app.get("/{full_path:path}", include_in_schema=False, response_model=None)
 async def spa_fallback(full_path: str):
     if full_path.startswith(API_PREFIXES):
         raise HTTPException(status_code=404, detail="Not Found")

@@ -7,6 +7,7 @@ from datetime import datetime
 from decimal import Decimal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     ForeignKey,
@@ -17,7 +18,7 @@ from sqlalchemy import (
     UniqueConstraint,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.infrastructure.db.session import Base
@@ -99,7 +100,7 @@ class Recommendation(Base):
     take_profit: Mapped[Decimal] = mapped_column(Numeric(18, 4), nullable=False)
     atr_value: Mapped[Decimal | None] = mapped_column(Numeric(18, 6))
     risk_reward: Mapped[Decimal] = mapped_column(Numeric(6, 3), default=Decimal("2.500"))
-    shap_summary: Mapped[dict] = mapped_column(JSONB, default=dict)
+    shap_summary: Mapped[dict] = mapped_column(JSON, default=dict)
     explanation_ar: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="active")
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
