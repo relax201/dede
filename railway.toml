@@ -1,12 +1,11 @@
-# Backend service on Railway
-# Set in Railway UI: Dockerfile path = backend/Dockerfile (or use this at root for API service)
-
+# تاسي فيجن — Railway (خدمة واحدة: API + واجهة)
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.railway.api"
 
 [deploy]
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+# Startup must answer health quickly; WS warm-up runs in background
+healthcheckTimeout = 120
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 5

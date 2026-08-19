@@ -35,15 +35,19 @@ API_PREFIXES = ("api/", "docs", "redoc", "openapi.json", "ws")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Keep startup fast so Railway healthchecks pass; warm SAHMK in background."""
+    import asyncio
+
     logger.info("Starting %s v%s", settings.APP_NAME, settings.APP_VERSION)
     try:
         from app.infrastructure.db.session import ensure_schema
 
-        ensure_schema()
+        await asyncio.wait_for(asyncio.to_thread(ensure_schema), timeout=8.0)
     except Exception as exc:  # noqa: BLE001
-        logger.error("Schema bootstrap failed (API will degrade): %s", exc)
+        logger.error("Schema bootstrap failed/skipped: %s", exc)
 
     stream = None
+    warm_task: asyncio.Task | None = None
     if settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY:
         from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
         from app.infrastructure.external.sahmk_ws import SahmkStockStream
@@ -57,26 +61,32 @@ async def lifespan(app: FastAPI):
             on_event=handle_sahmk_event,
             ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
         )
-        if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
+        sahmk_ws_mod.sahmk_stream = stream
+        # Start immediately on seed symbols — do NOT block healthchecks
+        stream.start()
+        logger.info("SAHMK WebSocket started on seed universe")
+
+        async def _warm_universe() -> None:
+            if not settings.SAHMK_WS_AUTO_UNIVERSE or settings.SAHMK_WS_SUBSCRIBE_ALL:
+                return
             try:
                 universe = await stream.expand_to_plan_limit()
                 logger.info("SAHMK WS auto-universe ready: %s symbols", len(universe))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Auto-universe build failed, using seeds: %s", exc)
 
-        sahmk_ws_mod.sahmk_stream = stream
-        stream.start()
-        logger.info(
-            "SAHMK WebSocket stream starting (mode=%s, universe=%s, subscribe_all=%s)",
-            stream.stats.get("mode"),
-            stream.stats.get("universe_size"),
-            stream.subscribe_all,
-        )
+        warm_task = asyncio.create_task(_warm_universe(), name="sahmk-warm-universe")
     else:
         logger.warning("SAHMK WebSocket disabled or SAHMK_API_KEY missing")
 
     yield
 
+    if warm_task is not None and not warm_task.done():
+        warm_task.cancel()
+        try:
+            await warm_task
+        except (asyncio.CancelledError, Exception):  # noqa: BLE001
+            pass
     if stream is not None:
         logger.info("Stopping SAHMK WebSocket stream")
         await stream.stop()
