@@ -82,3 +82,17 @@ railway whoami
 - عند الإقلاع يُنشئ الـ API جداول Postgres تلقائياً إن لم تكن موجودة.
 - لا ترفع `.env` إلى Git؛ الأسرار في Railway Variables فقط.
 - أسماء خدمات Postgres/Redis في `${{...}}` قد تختلف قليلاً حسب تسمية الخدمة في المشروع — اختر المرجع من قائمة Variables في الواجهة.
+
+## إذا الموقع لا يفتح رغم نجاح النشر
+
+في خدمة Railway → **Settings**:
+
+1. **Builder** = Dockerfile
+2. **Dockerfile path** = `Dockerfile.railway.api`
+3. **Root Directory** = فارغ
+4. **Custom Start Command** = فارغ
+5. لا تضف متغير `PORT` يدوياً
+6. Networking → Generate Domain على نفس الخدمة
+7. Variables: `SAHMK_API_KEY` و `SECRET_KEY` (≥32)
+
+ثم Redeploy وافتح `/healthz`.
