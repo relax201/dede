@@ -14,7 +14,7 @@ class Settings(BaseSettings):
 
     # Brand
     APP_NAME: str = "تاسي فيجن — TASI Vision"
-    APP_VERSION: str = "2.2.5"
+    APP_VERSION: str = "2.3.0"
     BRAND_NAME_AR: str = "تاسي فيجن"
     BRAND_NAME_EN: str = "TASI Vision"
     DEBUG: bool = False
@@ -50,9 +50,15 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, v: object) -> object:
         if v is None or (isinstance(v, str) and not v.strip()):
             return "sqlite:////tmp/tasi_vision.db"
-        if isinstance(v, str) and v.startswith("postgres://"):
-            return "postgresql://" + v[len("postgres://") :]
-        return v
+        url = str(v).strip()
+        if url.startswith("postgres://"):
+            url = "postgresql://" + url[len("postgres://") :]
+        # Common Railway misconfig: leftover localhost Postgres that refuses connections
+        if "postgresql" in url and any(
+            host in url for host in ("@localhost", "@127.0.0.1", "@::1", "@0.0.0.0")
+        ):
+            return "sqlite:////tmp/tasi_vision.db"
+        return url
 
     @field_validator("REDIS_URL", mode="before")
     @classmethod

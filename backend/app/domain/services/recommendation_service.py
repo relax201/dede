@@ -47,14 +47,14 @@ class RecommendationService:
         return response
 
     async def list_live(self, symbols: list[str], horizon_days: int = 5) -> list[RecommendationResponse]:
-        sem = asyncio.Semaphore(3)
+        sem = asyncio.Semaphore(4)
 
         async def _one(sym: str) -> RecommendationResponse | None:
             async with sem:
                 try:
                     return await asyncio.wait_for(
                         self.get_by_symbol(sym, horizon_days=horizon_days),
-                        timeout=12.0,
+                        timeout=25.0,
                     )
                 except Exception as exc:  # noqa: BLE001
                     logger.warning("Reco skipped for %s: %s", sym, exc)

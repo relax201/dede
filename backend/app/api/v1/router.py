@@ -23,6 +23,9 @@ api_router.include_router(companies.router)
 async def health_detail() -> dict:
     import asyncio
 
+    from app.core.release import RELEASE
+    from app.infrastructure.db.session import db_url_kind
+
     redis_ok = False
     try:
         redis_ok = await asyncio.wait_for(asyncio.to_thread(redis_client.client.ping), timeout=1.0)
@@ -34,6 +37,8 @@ async def health_detail() -> dict:
         postgres_ok = False
     return {
         "status": "ok",
+        "version": RELEASE,
+        "db": db_url_kind(),
         "postgres": bool(postgres_ok),
         "redis": bool(redis_ok),
         "memory_quotes": memory_quotes.stats(),

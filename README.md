@@ -216,11 +216,11 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 - ✅ **شموع تاريخية** (`GET /api/stock/{symbol}/candles`) + تسخين الكون
 - ✅ **Dashboard** مربوط بـ `/ws/live` والشموع الحقيقية
 - ✅ **نشر Railway** حي: https://dede-production-c796.up.railway.app/
-- ✅ **واجهة + API على نفس الرابط** بعد إعادة البناء
-- ✅ **تحليلات فنية حية** من شموع سهمك (`GET /api/recommendations`)
-- ✅ **تسجيل دخول / محفظة** (يتطلب Postgres)
-- ⏳ ربط `DATABASE_URL` / `REDIS_URL` عبر `/api/health/detail`
-- ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY`
+- ✅ **واجهة + API** على نفس الرابط
+- ✅ **تحليلات فنية** من شموع سهمك + بحث شركات
+- ✅ **تسجيل/محفظة** عبر SQLite تلقائي إن لم يُربط Postgres
+- ⏳ ربط Postgres/Redis الدائم في Railway للمتغيرات `${{Postgres.DATABASE_URL}}` / `${{Redis.REDIS_URL}}`
+- ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY` (اختياري)
 
 ```bash
 # فحص بث سهمك مباشرة

@@ -46,31 +46,64 @@ async def lifespan(app: FastAPI):
             await asyncio.wait_for(asyncio.to_thread(ensure_schema), timeout=5)
         except Exception as exc:  # noqa: BLE001
             logger.warning("schema skipped: %s", exc)
+
+        # Seed company universe for search / portfolio / sectors
+        try:
+            from app.domain.services.company_sync_service import CompanySyncService
+            from app.infrastructure.db.session import SessionLocal
+
+            db = SessionLocal()
+            try:
+                synced = await CompanySyncService(db=db).sync_tasi(
+                    enrich_sectors=True, enrich_limit=30
+                )
+                logger.info("companies synced count=%s", synced.get("count"))
+            finally:
+                db.close()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("company sync skipped: %s", exc)
+
         if not (settings.SAHMK_WS_ENABLED and settings.SAHMK_API_KEY):
             logger.warning("SAHMK WS disabled")
-            return
-        try:
-            from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
-            from app.infrastructure.external.sahmk_ws import SahmkStockStream
-            from app.infrastructure.messaging.live_bridge import (
-                handle_sahmk_event,
-                handle_sahmk_quote,
-            )
+        else:
+            try:
+                from app.infrastructure.external import sahmk_ws as sahmk_ws_mod
+                from app.infrastructure.external.sahmk_ws import SahmkStockStream
+                from app.infrastructure.messaging.live_bridge import (
+                    handle_sahmk_event,
+                    handle_sahmk_quote,
+                )
 
-            stream = SahmkStockStream(
-                on_quote=handle_sahmk_quote,
-                on_event=handle_sahmk_event,
-                ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
+                stream = SahmkStockStream(
+                    on_quote=handle_sahmk_quote,
+                    on_event=handle_sahmk_event,
+                    ping_interval=settings.SAHMK_WS_PING_INTERVAL_SECONDS,
+                )
+                sahmk_ws_mod.sahmk_stream = stream
+                stream.start()
+                app.state.sahmk_stream = stream
+                logger.info("SAHMK WS started")
+                if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
+                    await stream.expand_to_plan_limit()
+                    logger.info("SAHMK universe expanded")
+            except Exception as exc:  # noqa: BLE001
+                logger.exception("SAHMK warm failed: %s", exc)
+
+        # Pre-warm recommendation list so dashboard is not empty
+        try:
+            from app.domain.services.recommendation_service import RecommendationService
+            from app.infrastructure.cache import memory_recos
+
+            seeds = list(settings.sahmk_ws_seed_symbols)[:5]
+            rows = await RecommendationService(db=None).list_live(seeds, horizon_days=5)
+            memory_recos.put(
+                "list:5:5",
+                [r.model_dump(mode="json") for r in rows],
+                ttl=300,
             )
-            sahmk_ws_mod.sahmk_stream = stream
-            stream.start()
-            app.state.sahmk_stream = stream
-            logger.info("SAHMK WS started")
-            if settings.SAHMK_WS_AUTO_UNIVERSE and not settings.SAHMK_WS_SUBSCRIBE_ALL:
-                await stream.expand_to_plan_limit()
-                logger.info("SAHMK universe expanded")
+            logger.info("prewarmed %s recommendations", len(rows))
         except Exception as exc:  # noqa: BLE001
-            logger.exception("SAHMK warm failed: %s", exc)
+            logger.warning("reco prewarm skipped: %s", exc)
 
     task = asyncio.create_task(_warm(), name="warm")
     yield
@@ -112,10 +145,14 @@ def create_app() -> FastAPI:
     @application.get("/healthz")
     @application.get("/api/health")
     async def health() -> dict:
+        from app.core.release import RELEASE
+        from app.infrastructure.db.session import db_url_kind
+
         return {
             "status": "ok",
-            "version": settings.APP_VERSION,
+            "version": RELEASE,
             "static": (STATIC_DIR / "index.html").is_file(),
+            "db": db_url_kind(),
         }
 
     application.include_router(api_router, prefix=settings.API_V1_STR)

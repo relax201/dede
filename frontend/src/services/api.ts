@@ -96,7 +96,18 @@ export async function fetchRecommendations(horizon: number = 5): Promise<Recomme
         (reco.confidence > 0.75 ? "low" : reco.confidence > 0.55 ? "medium" : "high"),
     }));
   } catch {
-    return [];
+    // Fallback: fetch a few known symbols individually
+    const symbols = ["2222", "1120", "1180", "1010", "2010"];
+    const results: Recommendation[] = [];
+    for (const symbol of symbols) {
+      try {
+        const reco = await fetchRecommendation(symbol, horizon);
+        if (reco) results.push(reco);
+      } catch {
+        // skip
+      }
+    }
+    return results.sort((a, b) => b.confidence - a.confidence);
   }
 }
 
