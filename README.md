@@ -2,7 +2,7 @@
 
 ## ملخص تنفيذي
 
-**تاسي فيجن** منصة مؤسسية لأدوات تحليل سوق تاسي (مع إخلاء مسؤولية CMA) عبر Ensemble (XGBoost + LSTM + Prophet + AraBERT) بدقة مستهدفة ≥ 78% AUC-ROC. البيانات: SAHMK لحظي كل 3 ثوانٍ، LSEG للتاريخ والإغلاق، MarketAux للأخبار؛ failover إلى Tadawul/Redis. البنية على AWS `me-south-1` مع DR في `eu-central-1`. القرارات المعتمدة موثّقة في [`docs/DECISIONS.md`](docs/DECISIONS.md).
+**تاسي فيجن** منصة مؤسسية لأدوات تحليل سوق تاسي (مع إخلاء مسؤولية CMA) عبر Ensemble (XGBoost + LSTM + Prophet + AraBERT) بدقة مستهدفة ≥ 78% AUC-ROC. البيانات: SAHMK لحظي كل 3 ثوانٍ، LSEG للتاريخ والإغلاق، MarketAux للأخبار؛ failover إلى Tadawul/Redis. **النشر الحالي: [Railway.com](docs/RAILWAY.md)**. القرارات المعتمدة موثّقة في [`docs/DECISIONS.md`](docs/DECISIONS.md).
 
 ---
 
@@ -204,7 +204,7 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 | تغطية | 350+ أساسي · 120 متقدم (شهري) · إضافة يدوية |
 | أفق | 5 (أساسي) · 10/20 اختياري · جدولة 06:00 و 12:00 |
 | امتثال | أدوات تحليل + إخلاء مسؤولية · Audit 5 سنوات · موافقة CMA مبدئية |
-| سحابة | `me-south-1` + DR `eu-central-1` · ميزانية $2–3k/شهر |
+| سحابة | Railway.com (إنتاج حالي) · AWS لاحق اختياري |
 | هوية | تاسي فيجن · `#1A7A4E` / `#0A4D8C` / `#C9A84C` · وزير + Inter |
 | تسعير محفظة | جلسة=SAHMK · إغلاق=LSEG · فشل=Redis |
 
@@ -215,8 +215,9 @@ Dashboard: [`frontend/src/pages/Dashboard.tsx`](frontend/src/pages/Dashboard.tsx
 - ✅ **مزامنة شركات تاسي** (`POST /api/companies/sync`) — ~270 شركة
 - ✅ **شموع تاريخية** (`GET /api/stock/{symbol}/candles`) + تسخين الكون
 - ✅ **Dashboard** مربوط بـ `/ws/live` والشموع الحقيقية
+- ✅ **نشر Railway** جاهز (`docs/RAILWAY.md`, `Dockerfile.railway.api`, `Dockerfile.railway.web`)
+- ⏳ ربط مشروع Railway + Postgres/Redis + متغيرات الأسرار
 - ⏳ `LSEG_API_KEY` / `MARKETAUX_API_KEY` / `TADAWUL_API_KEY`
-- ⏳ تدريب النماذج على البيانات التاريخية + نشر AWS
 
 ```bash
 # فحص بث سهمك مباشرة

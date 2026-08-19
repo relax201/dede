@@ -36,9 +36,10 @@
 
 ## السحابة
 
-- أساسي: `AWS me-south-1`
-- DR: `AWS eu-central-1`
-- ميزانية: $2,000–$3,000 / شهر
+- **النشر الحالي:** Railway.com (مدفوع) — Postgres + Redis + api + web  
+  انظر [`docs/RAILWAY.md`](RAILWAY.md)
+- هدف مؤسسي لاحق (اختياري): `AWS me-south-1` مع DR `eu-central-1`
+- ميزانية AWS السابقة كمرجع: $2,000–$3,000 / شهر (لا تنطبق على خطة Railway الحالية)
 
 ## الهوية
 

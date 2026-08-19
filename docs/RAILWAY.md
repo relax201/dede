@@ -1,0 +1,75 @@
+# نشر تاسي فيجن على Railway.com
+
+الهدف: مشروع Railway واحد بخدمات **Postgres + Redis + api + web**.
+
+## الطريقة أ — من لوحة Railway (موصى بها)
+
+1. افتح [railway.app/new](https://railway.app/new) → **Deploy from GitHub repo**  
+   اختر `realx2030/TASI2050` والفرع `cursor/tasi-ai-platform-blueprint-9345` (أو `main` بعد الدمج).
+2. أضف قواعد البيانات:
+   - **New → Database → PostgreSQL**
+   - **New → Database → Redis**
+3. أنشئ خدمة **api** من نفس المستودع:
+   - Settings → **Dockerfile path** = `Dockerfile.railway.api`
+   - Root Directory = `/` (جذر المستودع)
+4. أنشئ خدمة **web** من نفس المستودع:
+   - Dockerfile path = `Dockerfile.railway.web`
+5. على **api** و **web**: Settings → Networking → **Generate Domain**
+6. اضبط متغيرات **api** (Variables):
+
+| المتغير | القيمة |
+|---------|--------|
+| `SECRET_KEY` | سلسلة عشوائية ≥ 32 حرفاً |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` |
+| `REDIS_URL` | `${{Redis.REDIS_URL}}` |
+| `SAHMK_API_KEY` | مفتاح سهمك `shmk_live_...` |
+| `SAHMK_BASE_URL` | `https://api.sahmk.sa/api/v1` |
+| `SAHMK_WS_URL` | `wss://api.sahmk.sa/ws/v1/stocks/` |
+| `SAHMK_WS_ENABLED` | `true` |
+| `SAHMK_WS_AUTO_UNIVERSE` | `true` |
+| `SAHMK_WS_MAX_SYMBOLS` | `60` |
+| `ALLOWED_ORIGINS` | `https://<web-domain>` |
+| `RAILWAY_STATIC_URL` | `https://<web-domain>` |
+| `DEBUG` | `false` |
+| `ENVIRONMENT` | `production` |
+| `API_V1_STR` | `/api` |
+| `TIMEZONE` | `Asia/Riyadh` |
+
+7. اضبط متغيرات **web** (Build / Variables — كـ Docker build args إن لزم):
+
+| المتغير | القيمة |
+|---------|--------|
+| `VITE_API_URL` | `https://<api-domain>` |
+| `VITE_WS_URL` | `wss://<api-domain>` |
+
+8. أعد Deploy للواجهة بعد تثبيت الدومينات و`VITE_*`.
+
+### تحقق سريع
+
+```bash
+curl -s https://<api-domain>/api/health
+# افتح https://<web-domain>
+```
+
+## الطريقة ب — عبر CLI (يحتاج توكن)
+
+1. من Railway Dashboard → Account → **Tokens** أنشئ توكن.  
+2. في بيئة الوكيل أو الطرفية:
+
+```bash
+export RAILWAY_TOKEN=...
+railway login --browserless   # أو استخدم التوكن مباشرة
+railway init
+railway add --database postgres
+railway add --database redis
+# اربط خدمتين من المستودع مع Dockerfile.railway.api / Dockerfile.railway.web
+```
+
+بدون `RAILWAY_TOKEN` لا يمكن للوكيل إكمال النشر تلقائياً.
+
+## ملاحظات
+
+- Railway يحقن `PORT` تلقائياً — الـ Dockerfiles جاهزة لذلك.
+- WebSocket على نفس نطاق الـ api عبر `wss://`.
+- لا ترفع `.env` إلى Git؛ الأسرار في Railway Variables فقط.
+- أسماء خدمات Postgres/Redis في `${{...}}` قد تختلف قليلاً حسب تسمية الخدمة في المشروع — اختر المرجع من قائمة Variables في الواجهة.

@@ -1,0 +1,12 @@
+# Backend service on Railway
+# Set in Railway UI: Dockerfile path = backend/Dockerfile (or use this at root for API service)
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.railway.api"
+
+[deploy]
+healthcheckPath = "/api/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

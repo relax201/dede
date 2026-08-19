@@ -1,0 +1,13 @@
+# Reference config for the Railway **web** service.
+# In Railway UI set Dockerfile path to Dockerfile.railway.web
+# (or copy this file content into that service's railway.toml if using per-service config).
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.railway.web"
+
+[deploy]
+healthcheckPath = "/"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

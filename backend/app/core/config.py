@@ -29,10 +29,17 @@ class Settings(BaseSettings):
     AES_256_KEY_BASE64: str = ""
     AUDIT_RETENTION_YEARS: int = 5  # CMA / حوكمة: 5 سنوات وليس 90 يوماً
 
-    # Databases
+    # Databases (Railway injects postgres:// — normalize for SQLAlchemy)
     DATABASE_URL: str
     CLICKHOUSE_URL: str = "clickhouse://default:@clickhouse:9000/tasi"
     REDIS_URL: str = "redis://redis:6379/0"
+
+    @field_validator("DATABASE_URL", mode="before")
+    @classmethod
+    def normalize_database_url(cls, v: object) -> object:
+        if isinstance(v, str) and v.startswith("postgres://"):
+            return "postgresql://" + v[len("postgres://") :]
+        return v
 
     # Primary live: SAHMK (سهمك) — https://www.sahmk.sa/en/developers/docs
     SAHMK_API_KEY: str = ""
@@ -97,7 +104,7 @@ class Settings(BaseSettings):
     MLFLOW_TRACKING_URI: str = "http://mlflow:5000"
     MODEL_ENSEMBLE_VERSION: str = "champion"
 
-    # CORS
+    # CORS — include Railway preview/custom domains via env
     ALLOWED_ORIGINS: str = "http://localhost:3000"
 
     # Risk defaults
@@ -105,11 +112,26 @@ class Settings(BaseSettings):
     REWARD_RISK_RATIO: float = 2.5
     RISK_PER_TRADE: float = 0.015
 
+    # Railway / cloud
+    PORT: int = 8000
+    RAILWAY_PUBLIC_DOMAIN: str = ""
+    RAILWAY_STATIC_URL: str = ""
+
     ENVIRONMENT: Literal["development", "staging", "production"] = "development"
 
     @property
     def cors_origins(self) -> list[str]:
-        return [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        origins = [o.strip() for o in self.ALLOWED_ORIGINS.split(",") if o.strip()]
+        if self.RAILWAY_STATIC_URL:
+            origins.append(self.RAILWAY_STATIC_URL.rstrip("/"))
+        # de-dupe preserve order
+        seen: set[str] = set()
+        out: list[str] = []
+        for o in origins:
+            if o not in seen:
+                seen.add(o)
+                out.append(o)
+        return out
 
     @property
     def forward_horizons(self) -> list[int]:
